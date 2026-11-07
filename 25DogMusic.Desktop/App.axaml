@@ -1,0 +1,127 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="_25DogMusic.Desktop.App"
+             RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+      <ResourceDictionary>
+        <Color x:Key="SystemAccentColor">#FF375F</Color>
+        <Color x:Key="SystemAccentColorLight1">#FF607F</Color>
+        <Color x:Key="SystemAccentColorLight2">#FF8AA0</Color>
+        <Color x:Key="SystemAccentColorLight3">#FFB3C3</Color>
+        <Color x:Key="SystemAccentColorDark1">#D92B4C</Color>
+        <Color x:Key="SystemAccentColorDark2">#B3223F</Color>
+        <Color x:Key="SystemAccentColorDark3">#8C1932</Color>
+
+        <ResourceDictionary.ThemeDictionaries>
+          <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="PageBg" Color="#0B0B0E" />
+            <SolidColorBrush x:Key="SidebarBg" Color="#C70A0A0D" />
+            <SolidColorBrush x:Key="SidebarBorder" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="TextPrimary" Color="#F2F2F5" />
+            <SolidColorBrush x:Key="TextSecondary" Color="#B8B8C0" />
+            <SolidColorBrush x:Key="TextMuted" Color="#A2A2AA" />
+            <SolidColorBrush x:Key="Divider" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="NavLabel" Color="#9C9CA6" />
+            <SolidColorBrush x:Key="NavText" Color="#E6E6EA" />
+            <SolidColorBrush x:Key="NavIcon" Color="#C9C9CF" />
+            <SolidColorBrush x:Key="NavHover" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="NavPressed" Color="#22FFFFFF" />
+            <SolidColorBrush x:Key="NavActiveBg" Color="#21FF375F" />
+            <SolidColorBrush x:Key="NavActiveFg" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="NavActiveIcon" Color="#FF7089" />
+            <SolidColorBrush x:Key="Surface" Color="#0EFFFFFF" />
+            <SolidColorBrush x:Key="SurfaceHover" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="CoverBg" Color="#17171E" />
+            <SolidColorBrush x:Key="InputBg" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="InputBorder" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="PlayerBg" Color="#E90C0C10" />
+            <SolidColorBrush x:Key="PlayerBorder" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="PlayerSurface" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="PlayerIcon" Color="#9A9AA2" />
+            <SolidColorBrush x:Key="PlayerFg" Color="#F2F2F5" />
+            <SolidColorBrush x:Key="PlayerMuted" Color="#9C9CA6" />
+            <SolidColorBrush x:Key="PlayBtnBg" Color="#FF375F" />
+            <SolidColorBrush x:Key="PlayBtnFg" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PlayHover" Color="#FF5C7D" />
+            <SolidColorBrush x:Key="PlayPressed" Color="#D92B4C" />
+            <SolidColorBrush x:Key="PrimaryBg" Color="#F2F2F5" />
+            <SolidColorBrush x:Key="PrimaryFg" Color="#0B0B0E" />
+            <SolidColorBrush x:Key="PrimaryHover" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PrimaryPressed" Color="#D9D9DE" />
+            <SolidColorBrush x:Key="GhostBg" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="GhostFg" Color="#E6E6EA" />
+            <SolidColorBrush x:Key="GhostHover" Color="#24FFFFFF" />
+            <SolidColorBrush x:Key="ToolHover" Color="#22FFFFFF" />
+            <SolidColorBrush x:Key="ToolPressed" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="PillBg" Color="#16FFFFFF" />
+            <SolidColorBrush x:Key="PillHover" Color="#24FFFFFF" />
+            <SolidColorBrush x:Key="PillPressed" Color="#30FFFFFF" />
+            <SolidColorBrush x:Key="GenreBg" Color="#11FFFFFF" />
+            <SolidColorBrush x:Key="GenreHover" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="GenrePressed" Color="#2AFFFFFF" />
+            <SolidColorBrush x:Key="SliderRail" Color="#2EFFFFFF" />
+            <SolidColorBrush x:Key="BackdropShade" Color="#C7000000" />
+            <SolidColorBrush x:Key="OverlayBg" Color="#F2050508" />
+            <SolidColorBrush x:Key="OverlayShade" Color="#99000000" />
+          </ResourceDictionary>
+
+          <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="PageBg" Color="#F5F5F9" />
+            <SolidColorBrush x:Key="SidebarBg" Color="#F0F0F5" />
+            <SolidColorBrush x:Key="SidebarBorder" Color="#DADAE2" />
+            <SolidColorBrush x:Key="TextPrimary" Color="#1C1C1E" />
+            <SolidColorBrush x:Key="TextSecondary" Color="#44444C" />
+            <SolidColorBrush x:Key="TextMuted" Color="#5C5C64" />
+            <SolidColorBrush x:Key="Divider" Color="#14000000" />
+            <SolidColorBrush x:Key="NavLabel" Color="#6A6A72" />
+            <SolidColorBrush x:Key="NavText" Color="#3A3A40" />
+            <SolidColorBrush x:Key="NavIcon" Color="#5E5E66" />
+            <SolidColorBrush x:Key="NavHover" Color="#0D000000" />
+            <SolidColorBrush x:Key="NavPressed" Color="#1A000000" />
+            <SolidColorBrush x:Key="NavActiveBg" Color="#16FF375F" />
+            <SolidColorBrush x:Key="NavActiveFg" Color="#B0002B" />
+            <SolidColorBrush x:Key="NavActiveIcon" Color="#E0003A" />
+            <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="SurfaceHover" Color="#0F000000" />
+            <SolidColorBrush x:Key="CoverBg" Color="#E4E4EA" />
+            <SolidColorBrush x:Key="InputBg" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="InputBorder" Color="#D6D6DE" />
+            <SolidColorBrush x:Key="PlayerBg" Color="#FBFBFD" />
+            <SolidColorBrush x:Key="PlayerBorder" Color="#1A000000" />
+            <SolidColorBrush x:Key="PlayerSurface" Color="#EDEDF2" />
+            <SolidColorBrush x:Key="PlayerIcon" Color="#6E6E76" />
+            <SolidColorBrush x:Key="PlayerFg" Color="#2C2C30" />
+            <SolidColorBrush x:Key="PlayerMuted" Color="#5C5C64" />
+            <SolidColorBrush x:Key="PlayBtnBg" Color="#E0003A" />
+            <SolidColorBrush x:Key="PlayBtnFg" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PlayHover" Color="#F02A5E" />
+            <SolidColorBrush x:Key="PlayPressed" Color="#C40033" />
+            <SolidColorBrush x:Key="PrimaryBg" Color="#1C1C1E" />
+            <SolidColorBrush x:Key="PrimaryFg" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PrimaryHover" Color="#303034" />
+            <SolidColorBrush x:Key="PrimaryPressed" Color="#000000" />
+            <SolidColorBrush x:Key="GhostBg" Color="#E9E9EF" />
+            <SolidColorBrush x:Key="GhostFg" Color="#1C1C1E" />
+            <SolidColorBrush x:Key="GhostHover" Color="#DDDDE4" />
+            <SolidColorBrush x:Key="ToolHover" Color="#0F000000" />
+            <SolidColorBrush x:Key="ToolPressed" Color="#1A000000" />
+            <SolidColorBrush x:Key="PillBg" Color="#E9E9EF" />
+            <SolidColorBrush x:Key="PillHover" Color="#DFDFE6" />
+            <SolidColorBrush x:Key="PillPressed" Color="#D4D4DB" />
+            <SolidColorBrush x:Key="GenreBg" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="GenreHover" Color="#F0F0F5" />
+            <SolidColorBrush x:Key="GenrePressed" Color="#E6E6EC" />
+            <SolidColorBrush x:Key="SliderRail" Color="#1A000000" />
+            <SolidColorBrush x:Key="BackdropShade" Color="#D9FFFFFF" />
+            <SolidColorBrush x:Key="OverlayBg" Color="#F7F7FB" />
+            <SolidColorBrush x:Key="OverlayShade" Color="#B3FFFFFF" />
+          </ResourceDictionary>
+        </ResourceDictionary.ThemeDictionaries>
+      </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

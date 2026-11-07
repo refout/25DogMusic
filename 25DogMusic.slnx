@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="25DogMusic.Core/25DogMusic.Core.csproj" />
+  <Project Path="25DogMusic.Desktop/25DogMusic.Desktop.csproj" />
+  <Project Path="25DogMusic.Tui/25DogMusic.Tui.csproj" />
+</Solution>

@@ -1,0 +1,17 @@
+# 构建输出
+bin/
+obj/
+artifacts/
+publish/
+
+# IDE / 本地配置
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+*.cache/
+
+# 系统文件
+Thumbs.db
+.DS_Store
