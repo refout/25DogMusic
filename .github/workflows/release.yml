@@ -74,16 +74,44 @@ jobs:
           Get-ChildItem $out -Recurse -Include *.pdb, *.lib -File -ErrorAction SilentlyContinue |
             Remove-Item -Force
 
-          # 只保留音频播放用到的 VLC 插件
-          $keep = @(
-            "access", "audio_filter", "audio_mixer", "audio_output", "codec", "demux",
-            "keystore", "logger", "misc", "packetizer", "stream_filter"
+          # 只保留音频播放用到的 VLC 插件（按模块文件名裁剪）
+          $keepModules = @(
+            # codec：音频解码
+            "libadpcm_plugin", "libaes3_plugin", "libaraw_plugin", "libavcodec_plugin", "libflac_plugin",
+            "libg711_plugin", "liblpcm_plugin", "libmpg123_plugin", "libopus_plugin", "libspeex_plugin",
+            "libuleaddvaudio_plugin", "libvorbis_plugin",
+            # demux：音频容器与播放列表
+            "libaiff_plugin", "libasf_plugin", "libau_plugin", "libcaf_plugin", "libdirectory_demux_plugin",
+            "libes_plugin", "libflacsys_plugin", "libmkv_plugin", "libmod_plugin", "libmp4_plugin",
+            "libnoseek_plugin", "libogg_plugin", "libplaylist_plugin", "librawaud_plugin", "libsmf_plugin",
+            "libtta_plugin", "libvoc_plugin", "libwav_plugin", "libxa_plugin",
+            # access：本地文件与 HTTP 代理
+            "libaccess_concat_plugin", "libaccess_imem_plugin", "libfilesystem_plugin", "libhttp_plugin", "libimem_plugin",
+            # 音频滤镜 / 重采样 / 均衡器
+            "libaudio_format_plugin", "libequalizer_plugin", "libparam_eq_plugin", "libscaletempo_plugin",
+            "libsimple_channel_mixer_plugin", "libspeex_resampler_plugin", "libtrivial_channel_mixer_plugin",
+            "libugly_resampler_plugin",
+            # packetizer：音频
+            "libpacketizer_copy_plugin", "libpacketizer_dts_plugin", "libpacketizer_flac_plugin",
+            "libpacketizer_mlp_plugin", "libpacketizer_mpeg4audio_plugin", "libpacketizer_mpegaudio_plugin",
+            # stream_filter
+            "libcache_block_plugin", "libcache_read_plugin", "libinflate_plugin", "libprefetch_plugin",
+            "libskiptags_plugin"
           )
           $plugins = Join-Path $out "libvlc/win-x64/plugins"
           if (Test-Path $plugins) {
-            Get-ChildItem $plugins -Directory |
-              Where-Object { $keep -notcontains $_.Name } |
-              ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
+            foreach ($dir in "codec", "demux", "access", "audio_filter", "packetizer", "stream_filter") {
+              $path = Join-Path $plugins $dir
+              if (-not (Test-Path $path)) { continue }
+              Get-ChildItem $path -File |
+                Where-Object { $keepModules -notcontains $_.BaseName } |
+                Remove-Item -Force
+            }
+            # 视频/网络协议等无关模块整体移除
+            Remove-Item (Join-Path $plugins "misc") -Recurse -Force -ErrorAction SilentlyContinue
+            Get-ChildItem $plugins -Recurse -Directory |
+              Where-Object { -not (Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue) } |
+              Remove-Item -Force
           }
 
           # 播放不需要的附加资源
@@ -143,12 +171,34 @@ jobs:
           ln -sf "$cc" "$LIB/libvlccore.so"
           cp -a /usr/lib/x86_64-linux-gnu/vlc/plugins/. "$LIB/plugins"/
 
-          # 只保留音频播放用到的插件
-          KEEP="access audio_filter audio_mixer audio_output codec demux keystore logger misc packetizer stream_filter"
-          for dir in "$LIB/plugins"/*; do
-            name=$(basename "$dir")
-            case " $KEEP " in *" $name "*) ;; *) rm -rf "$dir" ;; esac
+          # 只保留音频播放用到的插件模块
+          KEEP_MODULES="
+          libadpcm_plugin libaes3_plugin libaraw_plugin libavcodec_plugin libflac_plugin
+          libg711_plugin liblpcm_plugin libmpg123_plugin libopus_plugin libspeex_plugin
+          libuleaddvaudio_plugin libvorbis_plugin
+          libaiff_plugin libasf_plugin libau_plugin libcaf_plugin libdirectory_demux_plugin
+          libes_plugin libflacsys_plugin libmkv_plugin libmod_plugin libmp4_plugin
+          libnoseek_plugin libogg_plugin libplaylist_plugin librawaud_plugin libsmf_plugin
+          libtta_plugin libvoc_plugin libwav_plugin libxa_plugin
+          libaccess_concat_plugin libaccess_imem_plugin libfilesystem_plugin libhttp_plugin libimem_plugin
+          libaudio_format_plugin libequalizer_plugin libparam_eq_plugin libscaletempo_plugin
+          libsimple_channel_mixer_plugin libspeex_resampler_plugin libtrivial_channel_mixer_plugin
+          libugly_resampler_plugin
+          libpacketizer_copy_plugin libpacketizer_dts_plugin libpacketizer_flac_plugin
+          libpacketizer_mlp_plugin libpacketizer_mpeg4audio_plugin libpacketizer_mpegaudio_plugin
+          libcache_block_plugin libcache_read_plugin libinflate_plugin libprefetch_plugin libskiptags_plugin
+          "
+          KEEP_MODULES=$(printf '%s' "$KEEP_MODULES" | tr '\n' ' ')
+          for dir in codec demux access audio_filter packetizer stream_filter; do
+            [ -d "$LIB/plugins/$dir" ] || continue
+            for f in "$LIB/plugins/$dir"/*; do
+              [ -f "$f" ] || continue
+              base=$(basename "$f"); base="${base%.*}"
+              case " $KEEP_MODULES " in *" $base "*) ;; *) rm -f "$f" ;; esac
+            done
           done
+          rm -rf "$LIB/plugins/misc"
+          find "$LIB/plugins" -type d -empty -delete
 
           # 插件依赖的第三方共享库
           for f in "$LIB"/plugins/*/*.so; do
@@ -185,13 +235,35 @@ jobs:
           OUT="publish/macos-arm64"
           PLUGINS="$OUT/libvlc/osx-arm64/lib/vlc/plugins"
 
-          # 只保留音频播放用到的插件
-          KEEP="access audio_filter audio_mixer audio_output codec demux keystore logger misc packetizer stream_filter"
+          # 只保留音频播放用到的插件模块
+          KEEP_MODULES="
+          libadpcm_plugin libaes3_plugin libaraw_plugin libavcodec_plugin libflac_plugin
+          libg711_plugin liblpcm_plugin libmpg123_plugin libopus_plugin libspeex_plugin
+          libuleaddvaudio_plugin libvorbis_plugin
+          libaiff_plugin libasf_plugin libau_plugin libcaf_plugin libdirectory_demux_plugin
+          libes_plugin libflacsys_plugin libmkv_plugin libmod_plugin libmp4_plugin
+          libnoseek_plugin libogg_plugin libplaylist_plugin librawaud_plugin libsmf_plugin
+          libtta_plugin libvoc_plugin libwav_plugin libxa_plugin
+          libaccess_concat_plugin libaccess_imem_plugin libfilesystem_plugin libhttp_plugin libimem_plugin
+          libaudio_format_plugin libequalizer_plugin libparam_eq_plugin libscaletempo_plugin
+          libsimple_channel_mixer_plugin libspeex_resampler_plugin libtrivial_channel_mixer_plugin
+          libugly_resampler_plugin
+          libpacketizer_copy_plugin libpacketizer_dts_plugin libpacketizer_flac_plugin
+          libpacketizer_mlp_plugin libpacketizer_mpeg4audio_plugin libpacketizer_mpegaudio_plugin
+          libcache_block_plugin libcache_read_plugin libinflate_plugin libprefetch_plugin libskiptags_plugin
+          "
+          KEEP_MODULES=$(printf '%s' "$KEEP_MODULES" | tr '\n' ' ')
           if [ -d "$PLUGINS" ]; then
-            for dir in "$PLUGINS"/*; do
-              name=$(basename "$dir")
-              case " $KEEP " in *" $name "*) ;; *) rm -rf "$dir" ;; esac
+            for dir in codec demux access audio_filter packetizer stream_filter; do
+              [ -d "$PLUGINS/$dir" ] || continue
+              for f in "$PLUGINS/$dir"/*; do
+                [ -f "$f" ] || continue
+                base=$(basename "$f"); base="${base%.*}"
+                case " $KEEP_MODULES " in *" $base "*) ;; *) rm -f "$f" ;; esac
+              done
             done
+            rm -rf "$PLUGINS/misc"
+            find "$PLUGINS" -type d -empty -delete
           fi
           find "$OUT" -name '*.dSYM' -prune -exec rm -rf {} +
 
