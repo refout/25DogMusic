@@ -107,8 +107,14 @@ jobs:
                 Where-Object { $keepModules -notcontains $_.BaseName } |
                 Remove-Item -Force
             }
-            # 视频/网络协议等无关模块整体移除
-            Remove-Item (Join-Path $plugins "misc") -Recurse -Force -ErrorAction SilentlyContinue
+            # 整体移除音频用不到的插件目录（视频/流媒体/字幕等）
+            $keepDirs = @(
+              "access", "audio_filter", "audio_mixer", "audio_output", "codec", "demux",
+              "keystore", "logger", "packetizer", "stream_filter"
+            )
+            Get-ChildItem $plugins -Directory |
+              Where-Object { $keepDirs -notcontains $_.Name } |
+              ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
             Get-ChildItem $plugins -Recurse -Directory |
               Where-Object { -not (Get-ChildItem $_.FullName -Recurse -File -ErrorAction SilentlyContinue) } |
               Remove-Item -Force
@@ -197,7 +203,13 @@ jobs:
               case " $KEEP_MODULES " in *" $base "*) ;; *) rm -f "$f" ;; esac
             done
           done
-          rm -rf "$LIB/plugins/misc"
+          # 整体移除音频用不到的插件目录
+          KEEP_DIRS="access audio_filter audio_mixer audio_output codec demux keystore logger packetizer stream_filter"
+          for dir in "$LIB/plugins"/*; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            case " $KEEP_DIRS " in *" $name "*) ;; *) rm -rf "$dir" ;; esac
+          done
           find "$LIB/plugins" -type d -empty -delete
 
           # 插件依赖的第三方共享库
@@ -262,7 +274,13 @@ jobs:
                 case " $KEEP_MODULES " in *" $base "*) ;; *) rm -f "$f" ;; esac
               done
             done
-            rm -rf "$PLUGINS/misc"
+            # 整体移除音频用不到的插件目录
+            KEEP_DIRS="access audio_filter audio_mixer audio_output codec demux keystore logger packetizer stream_filter"
+            for dir in "$PLUGINS"/*; do
+              [ -d "$dir" ] || continue
+              name=$(basename "$dir")
+              case " $KEEP_DIRS " in *" $name "*) ;; *) rm -rf "$dir" ;; esac
+            done
             find "$PLUGINS" -type d -empty -delete
           fi
           find "$OUT" -name '*.dSYM' -prune -exec rm -rf {} +
