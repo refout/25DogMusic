@@ -19,6 +19,38 @@ public sealed class VlcPlayer : IDisposable
 
     public bool IsPlaying => _player.IsPlaying;
 
+    /// <summary>VLС 自带的均衡器预设名称（用于设置页下拉）。</summary>
+    public IReadOnlyList<string> EqualizerPresets
+    {
+        get
+        {
+            var result = new List<string>();
+            using var eq = new Equalizer();
+            var count = (int)eq.PresetCount;
+            for (var i = 0; i < count; i++) result.Add(eq.PresetName((uint)i) ?? $"预设 {i}");
+            return result;
+        }
+    }
+
+    /// <summary>应用均衡器预设，index 为 -1 时关闭。</summary>
+    public void ApplyEqualizer(int index)
+    {
+        try
+        {
+            if (index < 0)
+            {
+                _player.UnsetEqualizer();
+                return;
+            }
+            var equalizer = new Equalizer((uint)index);
+            _player.SetEqualizer(equalizer);
+        }
+        catch
+        {
+            // 均衡器不可用时忽略，不影响播放
+        }
+    }
+
     /// <summary>一曲播完（在 VLC 线程触发，界面侧只置标志位）。</summary>
     public event EventHandler? EndReached;
     public long Position => _player.Time;

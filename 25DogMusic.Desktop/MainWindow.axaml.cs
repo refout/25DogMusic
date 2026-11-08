@@ -7,6 +7,8 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -91,6 +93,9 @@ public partial class MainWindow : Window
 
     bool IsLight => string.Equals(_config.Theme, "light", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Win11（22000+）才支持云母/亚克力等窗口材质。</summary>
+    static bool IsWindows11 => OperatingSystem.IsWindows() && Environment.OSVersion.Version.Build >= 22000;
+
     IBrush TextPrimary => IsLight ? LTextPrimary : DTextPrimary;
     IBrush TextSecondary => IsLight ? LTextSecondary : DTextSecondary;
     IBrush TextMuted => IsLight ? LTextMuted : DTextMuted;
@@ -158,6 +163,9 @@ public partial class MainWindow : Window
 
     MusicApiClient? _api;
     VlcPlayer? _player;
+    readonly SpectrumAnalyzer _spectrum = new();
+    DesktopLyricsWindow? _desktopLyrics;
+    bool _desktopLyricsAutoClose;
     StreamProxy? _proxy;
     DispatcherTimer? _timer;
     CancellationTokenSource? _pageLoadCts;
@@ -169,7 +177,21 @@ public partial class MainWindow : Window
     List<Genre> _genres = new();
     List<Track> _tracks = new();
     List<Track> _queue = new();
+    Playlist? _currentPlaylist;
     int _queueIndex = -1;
+    readonly List<Track> _roamTracks = new();
+    Control? _roamQueueSection;
+
+    // 歌单「添加歌曲」侧边抽屉
+    Playlist? _pickerPlaylist;
+    ScrollViewer? _searchListScroll;
+    readonly HashSet<string> _pickerSelected = new();
+    readonly List<Track> _pickerTracks = new();
+    string _pickerKeyword = string.Empty;
+    int _pickerPage;
+    int _pickerTotal = -1;
+    bool _pickerLoading;
+    bool _pickerFinished;
 
     bool _roaming;
     string? _roamId;
@@ -185,19 +207,38 @@ public partial class MainWindow : Window
     Mode _mode = Mode.Albums;
 
     Track? _currentTrack;
+    string _lyricsGuid = string.Empty;
     List<LyricLine> _lyrics = new();
     readonly List<TextBlock> _lyricBlocks = new();
     int _lyricIndex = -1;
 
     Panel _pageHost = null!;
 
-    // 音乐库分页（滚动到底部继续加载）
-    readonly HashSet<string> _librarySeen = new();
-    int _libraryPage;
-    int _libraryTotal = -1;
-    bool _libraryLoading;
-    bool _infiniteLibrary;
-    TextBlock? _libraryFooter;
+    // 通用分页（滚动到底部继续加载）：音乐库、收藏、最近、专辑/歌手/流派/歌单曲目共用
+    readonly HashSet<string> _pagedSeen = new();
+    int _pagedPage;
+    int _pagedTotal = -1;
+    bool _pagedLoading;
+    bool _pagedActive;
+    Func<int, Task<JsonDocument>>? _pagedFetch;
+    string _pagedTitle = string.Empty;
+    string _pagedSubtitle = string.Empty;
+    Control? _pagedAction;
+    TextBlock? _pagedFooter;
+    bool _pagedEmpty;
+
+    // 卡片网格（专辑/风格）与歌手行的分页状态
+    Func<int, Task<JsonDocument>>? _gridFetch;
+    Func<JsonDocument, List<(string?, Image)>, List<Control>>? _gridBuild;
+    int _gridPage;
+    int _gridTotal = -1;
+    int _gridLoaded;
+    bool _gridLoading;
+    bool _gridActive;
+    Panel? _gridPanel;
+    TextBlock? _gridFooter;
+    string _gridUnit = "项";
+    int _gridVersion;
 
     bool _shuffle;
     int _repeat;
@@ -210,6 +251,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _pageHost = ContentPanel;
+
+        ContentScroll.SizeChanged += (_, _) => UpdateSearchListHeight();
 
         NavHome.Click += async (_, _) => await LoadHomeAsync();
         NavFavorites.Click += async (_, _) => await LoadFavoritesAsync();
@@ -257,6 +300,18 @@ public partial class MainWindow : Window
             StatusText.Text = "已清空播放列表";
         };
 
+        PickerPanelClose.Click += (_, _) => HidePickerDrawer();
+        PickerPanelCancel.Click += (_, _) => HidePickerDrawer();
+        PickerPanelAdd.Click += async (_, _) => await AddSelectedFromPickerAsync();
+        PickerSearchBox.KeyDown += async (_, e) =>
+        {
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            _pickerKeyword = (PickerSearchBox.Text ?? string.Empty).Trim();
+            await ReloadPickerAsync();
+        };
+        PickerPanelScroll.ScrollChanged += (_, _) => OnPickerScrolled();
+
         NowClickArea.PointerPressed += (_, _) => OpenOverlay();
         CloseOverlayButton.Click += (_, _) => HideOverlay();
         OverlayPlay.Click += (_, _) => TogglePlay();
@@ -276,6 +331,7 @@ public partial class MainWindow : Window
 
         KeyDown += OnWindowKeyDown;
         ListScroll.ScrollChanged += (_, _) => OnListScrolled();
+        ContentScroll.ScrollChanged += (_, _) => OnContentScrolled();
 
         _player = new VlcPlayer();
         _player.Volume = MapVolume(_config.Volume);
@@ -287,6 +343,29 @@ public partial class MainWindow : Window
         _repeat = Math.Clamp(_config.StartRepeat, 0, 2);
         ApplyBackground();
         UpdatePlaybackModeUi();
+
+        OverlaySpectrum.Analyzer = _spectrum;
+        OverlaySpectrum.BarBrush = AccentSoft;
+        _player.ApplyEqualizer(_config.EqPresetIndex);
+
+        DesktopLyricsButton.Click += (_, _) =>
+        {
+            _config.DesktopLyrics = !_config.DesktopLyrics;
+            _config.Save();
+            ApplyDesktopLyrics();
+            UpdateDesktopLyricsButton();
+            StatusText.Text = _config.DesktopLyrics
+                ? _lyrics.Count == 0 ? "当前歌曲暂无歌词，有歌词时会自动显示" : "桌面歌词已开启"
+                : "桌面歌词已关闭";
+        };
+
+        Opened += (_, _) =>
+        {
+            UpdateDesktopLyricsButton();
+            if (_config.DesktopLyrics) ApplyDesktopLyrics();
+            // 窗口句柄就绪后再设置一次系统标题栏，Win10 也能拿到深色标题栏
+            WindowChrome.ApplyTitleBar(this, !IsLight, _windowBaseColor);
+        };
 
         if (!string.IsNullOrWhiteSpace(_config.Token))
         {
@@ -317,6 +396,14 @@ public partial class MainWindow : Window
 
     int _settingsTab;
 
+    static TextBlock SettingsTabHeader(string text) => new()
+    {
+        Text = text,
+        FontSize = 15.5,
+        FontWeight = FontWeight.Medium,
+        VerticalAlignment = VerticalAlignment.Center
+    };
+
     void ShowSettingsPage(string? message = null)
     {
         _mode = Mode.Settings;
@@ -331,17 +418,51 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 8, 0, 0)
         };
 
-        tabs.Items.Add(new TabItem { Header = "账号与连接", Content = BuildAccountCard(message) });
-        tabs.Items.Add(new TabItem { Header = "外观", Content = BuildAppearanceCard() });
-        tabs.Items.Add(new TabItem { Header = "音质与播放", Content = BuildPlaybackCard() });
+        tabs.Items.Add(new TabItem { Header = SettingsTabHeader("账号与连接"), Content = BuildAccountCard(message) });
+        tabs.Items.Add(new TabItem { Header = SettingsTabHeader("外观"), Content = BuildAppearanceCard() });
+        tabs.Items.Add(new TabItem { Header = SettingsTabHeader("音质与播放"), Content = BuildPlaybackCard() });
 
         tabs.SelectedIndex = Math.Clamp(_settingsTab, 0, tabs.ItemCount - 1);
         tabs.SelectionChanged += (_, _) =>
         {
             if (tabs.SelectedIndex >= 0) _settingsTab = tabs.SelectedIndex;
+            AnimateSettingsTab(tabs.SelectedItem as TabItem);
         };
 
         ContentPanel.Children.Add(tabs);
+
+        // 首次进入也播放一次淡入过渡
+        AnimateSettingsTab(tabs.SelectedItem as TabItem);
+    }
+
+    /// <summary>设置页切换 Tab 时内容淡入并轻微上移。</summary>
+    void AnimateSettingsTab(TabItem? item)
+    {
+        if (item?.Content is not Control content) return;
+
+        content.Transitions = new Transitions
+        {
+            new DoubleTransition
+            {
+                Property = OpacityProperty,
+                Duration = TimeSpan.FromMilliseconds(220),
+                Easing = new CubicEaseOut()
+            },
+            new TransformOperationsTransition
+            {
+                Property = RenderTransformProperty,
+                Duration = TimeSpan.FromMilliseconds(220),
+                Easing = new CubicEaseOut()
+            }
+        };
+
+        content.Opacity = 0;
+        content.RenderTransform = new TranslateTransform(0, 10);
+        Dispatcher.UIThread.Post(() =>
+        {
+            content.Opacity = 1;
+            content.RenderTransform = new TranslateTransform(0, 0);
+        }, DispatcherPriority.Background);
     }
 
     // ---- 播放列表抽屉 ----
@@ -356,6 +477,7 @@ public partial class MainWindow : Window
 
     void ShowQueueDrawer()
     {
+        HidePickerDrawer();
         RefreshQueueDrawer();
         QueuePanel.IsVisible = true;
         Dispatcher.UIThread.Post(() => QueuePanelScroll.Offset = new Vector(0, 0), DispatcherPriority.Background);
@@ -476,6 +598,193 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---- 歌单「添加歌曲」侧边抽屉 ----
+
+    async Task ShowPickerDrawerAsync(Playlist playlist)
+    {
+        HideQueueDrawer();
+        _pickerPlaylist = playlist;
+        PickerPanelName.Text = $"「{playlist.Name}」";
+        PickerSearchBox.Text = string.Empty;
+        _pickerKeyword = string.Empty;
+        _pickerSelected.Clear();
+        UpdatePickerSummary();
+        PickerPanel.IsVisible = true;
+        await ReloadPickerAsync();
+    }
+
+    void HidePickerDrawer()
+    {
+        PickerPanel.IsVisible = false;
+        _pickerPlaylist = null;
+    }
+
+    async Task ReloadPickerAsync()
+    {
+        _pickerTracks.Clear();
+        _pickerPage = 0;
+        _pickerTotal = -1;
+        _pickerFinished = false;
+        _pickerLoading = false;
+        PickerPanelRows.Children.Clear();
+        PickerPanelScroll.Offset = new Vector(0, 0);
+        await LoadPickerPageAsync();
+    }
+
+    void OnPickerScrolled()
+    {
+        if (_pickerLoading || _pickerFinished) return;
+        if (PickerPanelScroll.Extent.Height <= 0) return;
+        if (PickerPanelScroll.Offset.Y + PickerPanelScroll.Viewport.Height >= PickerPanelScroll.Extent.Height - 160)
+        {
+            _ = LoadPickerPageAsync();
+        }
+    }
+
+    async Task LoadPickerPageAsync()
+    {
+        if (_pickerLoading || _pickerFinished || _pickerPlaylist is null) return;
+        _pickerLoading = true;
+
+        try
+        {
+            _pickerPage++;
+            using var doc = _pickerKeyword.Length > 0
+                ? await Api().SearchTracksAsync(_pickerKeyword, _pickerPage, 100)
+                : await Api().GetTracksAsync(_pickerPage, 100);
+
+            if (_pickerTotal < 0) _pickerTotal = PageTotal(doc);
+            var batch = Library.ParseTracks(doc);
+
+            if (batch.Count == 0)
+            {
+                _pickerFinished = true;
+                if (_pickerTracks.Count == 0)
+                {
+                    PickerPanelRows.Children.Add(new TextBlock
+                    {
+                        Text = "没有找到歌曲",
+                        FontSize = 12.5,
+                        Foreground = TextMuted,
+                        Margin = new Thickness(4, 16, 0, 0)
+                    });
+                }
+                return;
+            }
+
+            foreach (var track in batch)
+            {
+                _pickerTracks.Add(track);
+                PickerPanelRows.Children.Add(BuildPickerRow(track));
+            }
+
+            if (_pickerTotal >= 0 && _pickerTracks.Count >= _pickerTotal) _pickerFinished = true;
+        }
+        catch (Exception ex)
+        {
+            _pickerFinished = true;
+            HandleError(ex, "加载歌曲失败");
+        }
+        finally
+        {
+            _pickerLoading = false;
+        }
+    }
+
+    Control BuildPickerRow(Track track)
+    {
+        var box = new CheckBox
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            IsChecked = _pickerSelected.Contains(track.Guid)
+        };
+        box.IsCheckedChanged += (_, _) =>
+        {
+            if (box.IsChecked == true) _pickerSelected.Add(track.Guid);
+            else _pickerSelected.Remove(track.Guid);
+            UpdatePickerSummary();
+        };
+
+        var title = new TextBlock
+        {
+            Text = track.Title,
+            FontSize = 13,
+            Foreground = TextPrimary,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        var sub = new TextBlock
+        {
+            Text = string.IsNullOrWhiteSpace(track.Artist) ? track.AlbumName : $"{track.Artist} · {track.AlbumName}",
+            FontSize = 10.5,
+            Foreground = TextSecondary,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        var texts = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        texts.Children.Add(title);
+        texts.Children.Add(sub);
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        grid.Children.Add(box);
+        Grid.SetColumn(texts, 1);
+        grid.Children.Add(texts);
+
+        var row = new Border
+        {
+            Padding = new Thickness(8, 7),
+            CornerRadius = new CornerRadius(10),
+            Background = Brushes.Transparent,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Child = grid
+        };
+        row.PointerEntered += (_, _) => row.Background = RowHover;
+        row.PointerExited += (_, _) => row.Background = Brushes.Transparent;
+        row.PointerPressed += (_, _) => box.IsChecked = !(box.IsChecked == true);
+        return row;
+    }
+
+    void UpdatePickerSummary()
+    {
+        PickerPanelSummary.Text = $"已选 {_pickerSelected.Count} 首";
+        PickerPanelAdd.IsEnabled = _pickerSelected.Count > 0;
+    }
+
+    async Task AddSelectedFromPickerAsync()
+    {
+        var playlist = _pickerPlaylist;
+        if (playlist is null || _pickerSelected.Count == 0) return;
+
+        PickerPanelAdd.IsEnabled = false;
+        PickerPanelAdd.Content = "正在添加…";
+
+        var added = 0;
+        foreach (var guid in _pickerSelected.ToList())
+        {
+            try
+            {
+                await Api().AddTrackToPlaylistAsync(playlist.Guid, guid);
+                added++;
+            }
+            catch
+            {
+                // 单首失败不影响其余歌曲
+            }
+        }
+
+        PickerPanelAdd.Content = "添加";
+        UpdatePickerSummary();
+
+        if (added > 0)
+        {
+            StatusText.Text = $"已添加 {added} 首到歌单「{playlist.Name}」";
+            HidePickerDrawer();
+            await OpenPlaylistAsync(playlist);
+        }
+        else
+        {
+            StatusText.Text = "添加失败，请稍后再试";
+        }
+    }
+
     Border MakeSettingsCard(StackPanel content) => new()
     {
         Background = Surface,
@@ -564,6 +873,32 @@ public partial class MainWindow : Window
             header.Children.Add(logout);
         }
 
+        // 已登录：只展示账号信息，不显示登录表单
+        if (loggedIn)
+        {
+            TextBlock InfoValue(string text) => new()
+            {
+                Text = text,
+                FontSize = 12.5,
+                Foreground = TextSecondary,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var infoBody = new StackPanel { Spacing = 14 };
+            infoBody.Children.Add(header);
+            infoBody.Children.Add(BuildSettingRow("服务器地址", null, InfoValue(_config.BaseUrl)));
+            infoBody.Children.Add(BuildSettingRow("当前账号", null,
+                InfoValue(string.IsNullOrWhiteSpace(_config.LastUsername) ? "飞牛音乐用户" : _config.LastUsername)));
+            infoBody.Children.Add(new TextBlock
+            {
+                Text = "需要切换账号？先点击右上角「退出登录」，登录表单会重新出现。",
+                FontSize = 11.5,
+                Foreground = TextMuted,
+                TextWrapping = TextWrapping.Wrap
+            });
+            return MakeSettingsCard(infoBody);
+        }
+
         var serverBox = MakeFormBox(_config.BaseUrl, "https://10.0.0.10");
         var userBox = MakeFormBox(_config.LastUsername ?? string.Empty, "用户名");
         var passBox = MakeFormBox(string.Empty, "密码");
@@ -594,33 +929,60 @@ public partial class MainWindow : Window
         Grid.SetColumn(passField, 2);
         credentials.Children.Add(passField);
 
-        var codeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,10,Auto") };
+        var codeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,10,110") };
         codeRow.Children.Add(codeBox);
         Grid.SetColumn(submitButton, 2);
         codeRow.Children.Add(submitButton);
 
-        var body = new StackPanel { Spacing = 12 };
-        body.Children.Add(header);
-        body.Children.Add(BuildField("服务器地址", serverBox));
-        body.Children.Add(credentials);
-        body.Children.Add(loginButton);
-        body.Children.Add(new Border { Height = 1, Background = Divider, Margin = new Thickness(0, 4, 0, 2) });
-        body.Children.Add(new TextBlock
+        TextBlock SectionHeading(string text) => new()
         {
-            Text = "浏览器授权",
+            Text = text,
             FontSize = 12.5,
             FontWeight = FontWeight.SemiBold,
-            Foreground = CardLabel
-        });
-        body.Children.Add(new TextBlock
+            Foreground = CardLabel,
+            Margin = new Thickness(0, 0, 0, 2)
+        };
+
+        var passwordPane = new StackPanel { Spacing = 10 };
+        passwordPane.Children.Add(SectionHeading("账号密码登录"));
+        passwordPane.Children.Add(BuildField("服务器地址", serverBox));
+        passwordPane.Children.Add(credentials);
+        passwordPane.Children.Add(loginButton);
+
+        var oauthPane = new StackPanel { Spacing = 10 };
+        oauthPane.Children.Add(SectionHeading("浏览器授权"));
+        oauthPane.Children.Add(new TextBlock
         {
             Text = "打开飞牛 NAS 授权页，登录后把回跳地址或 code 粘贴到下方。",
             FontSize = 11.5,
             Foreground = TextMuted,
             TextWrapping = TextWrapping.Wrap
         });
-        body.Children.Add(oauthButton);
-        body.Children.Add(codeRow);
+        oauthPane.Children.Add(oauthButton);
+        oauthPane.Children.Add(codeRow);
+
+        var divider = new Border
+        {
+            Width = 1,
+            Background = Divider,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Margin = new Thickness(0, 2)
+        };
+
+        var columns = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,1,*"),
+            ColumnSpacing = 22
+        };
+        columns.Children.Add(passwordPane);
+        Grid.SetColumn(divider, 1);
+        columns.Children.Add(divider);
+        Grid.SetColumn(oauthPane, 2);
+        columns.Children.Add(oauthPane);
+
+        var body = new StackPanel { Spacing = 16 };
+        body.Children.Add(header);
+        body.Children.Add(columns);
 
         return MakeSettingsCard(body);
     }
@@ -669,22 +1031,30 @@ public partial class MainWindow : Window
 
         foreach (var option in options)
         {
+            var coverImage = new Image { Stretch = Stretch.UniformToFill };
+
+            var fillContent = new Grid();
+            fillContent.Children.Add(new Border { Background = option.Brush });
+            if (option.Mode == "cover") fillContent.Children.Add(coverImage);
+
             var fill = new Border
             {
-                Width = 54,
-                Height = 40,
-                CornerRadius = new CornerRadius(10),
-                Background = option.Brush,
+                Width = 58,
+                Height = 58,
+                CornerRadius = new CornerRadius(12),
+                ClipToBounds = true,
+                Background = Brushes.Transparent,
                 BorderBrush = SwatchBorder,
                 BorderThickness = new Thickness(1),
-                IsHitTestVisible = false
+                IsHitTestVisible = false,
+                Child = fillContent
             };
 
             var swatch = new Button
             {
                 Content = fill,
-                Width = 54,
-                Height = 40,
+                Width = 58,
+                Height = 58,
                 Padding = new Thickness(0),
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
@@ -712,7 +1082,85 @@ public partial class MainWindow : Window
             });
             wrap.Children.Add(item);
             swatches[option.Mode] = fill;
+
+            if (option.Mode == "cover") _ = LoadCoverSwatchAsync(coverImage);
         }
+
+        // 末尾的颜色选择方框：点击打开调色板
+        var customColor = Color.TryParse(_config.BackgroundCustomColor, out var parsed)
+            ? parsed
+            : Color.Parse("#2B1B33");
+        var customFill = new Border
+        {
+            Width = 58,
+            Height = 58,
+            CornerRadius = new CornerRadius(12),
+            ClipToBounds = true,
+            Background = new SolidColorBrush(customColor),
+            BorderBrush = SwatchBorder,
+            BorderThickness = new Thickness(1),
+            IsHitTestVisible = false
+        };
+
+        var customButton = new Button
+        {
+            Content = customFill,
+            Width = 58,
+            Height = 58,
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        customButton.Classes.Add("swatch");
+
+        var palette = new WrapPanel { Width = 210, Margin = new Thickness(2) };
+        foreach (var hex in new[]
+                 {
+                     "#FF375F", "#FF7A45", "#F5A524", "#34C759", "#0FA3A3", "#2E7CF6",
+                     "#7A5CFF", "#C04AB8", "#8A5A44", "#6B7280", "#2B1B33", "#0B0B0E"
+                 })
+        {
+            var color = Color.Parse(hex);
+            var chip = new Border
+            {
+                Width = 30,
+                Height = 30,
+                Margin = new Thickness(3),
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(color),
+                BorderBrush = SwatchBorder,
+                BorderThickness = new Thickness(1),
+                Cursor = new Cursor(StandardCursorType.Hand)
+            };
+            chip.PointerPressed += (_, _) =>
+            {
+                _config.BackgroundCustomColor = hex;
+                _config.BackgroundMode = "custom";
+                _config.Save();
+                customFill.Background = new SolidColorBrush(color);
+                ApplyBackground();
+                UpdateSelection();
+                StatusText.Text = $"背景：自定义 {hex}";
+                customButton.Flyout?.Hide();
+            };
+            palette.Children.Add(chip);
+        }
+
+        customButton.Flyout = new Flyout { Content = palette };
+
+        var customItem = new StackPanel { Spacing = 0, Margin = new Thickness(0, 0, 16, 8) };
+        customItem.Children.Add(customButton);
+        customItem.Children.Add(new TextBlock
+        {
+            Text = "自定义",
+            FontSize = 11.5,
+            Foreground = TextSecondary,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 6, 0, 0)
+        });
+        wrap.Children.Add(customItem);
+        swatches["custom"] = customFill;
 
         void UpdateSelection()
         {
@@ -754,7 +1202,9 @@ public partial class MainWindow : Window
             Width = 190,
             HorizontalAlignment = HorizontalAlignment.Right
         };
-        body.Children.Add(BuildSettingRow("窗口材质", "Windows 11 的云母 / 亚克力 / 液态玻璃效果", materialBox));
+        body.Children.Add(BuildSettingRow("窗口材质",
+            IsWindows11 ? "Windows 11 的云母 / 亚克力 / 液态玻璃效果" : "Windows 10 不支持窗口材质，将使用纯色背景",
+            materialBox));
 
         var opacityValue = new TextBlock
         {
@@ -789,7 +1239,7 @@ public partial class MainWindow : Window
 
         void UpdateMaterialState()
         {
-            var active = materialBox.SelectedIndex > 0;
+            var active = materialBox.IsEnabled && materialBox.SelectedIndex > 0;
             opacitySlider.IsEnabled = active;
             opacityValue.Opacity = active ? 1.0 : 0.45;
             wrap.IsEnabled = true;
@@ -808,6 +1258,8 @@ public partial class MainWindow : Window
             ApplyBackground(announceMaterial: true);
             UpdateMaterialState();
         };
+
+        if (!IsWindows11) materialBox.IsEnabled = false;
 
         opacitySlider.ValueChanged += (_, e) =>
         {
@@ -924,6 +1376,53 @@ public partial class MainWindow : Window
         };
         body.Children.Add(BuildSettingRow("默认循环模式", "启动时应用的循环方式", repeatBox));
 
+        var spectrumSwitch = new ToggleSwitch
+        {
+            IsChecked = _config.SpectrumEnabled,
+            OnContent = string.Empty,
+            OffContent = string.Empty,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        spectrumSwitch.IsCheckedChanged += (_, _) =>
+        {
+            _config.SpectrumEnabled = spectrumSwitch.IsChecked == true;
+            _config.Save();
+            SyncSpectrum(_player?.IsPlaying == true && !_paused);
+        };
+        body.Children.Add(BuildSettingRow("频谱可视化", "全屏播放页显示跟随音频的实时频谱", spectrumSwitch));
+
+        var lyricsSwitch = new ToggleSwitch
+        {
+            IsChecked = _config.DesktopLyrics,
+            OnContent = string.Empty,
+            OffContent = string.Empty,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        lyricsSwitch.IsCheckedChanged += (_, _) =>
+        {
+            _config.DesktopLyrics = lyricsSwitch.IsChecked == true;
+            _config.Save();
+            ApplyDesktopLyrics();
+        };
+        body.Children.Add(BuildSettingRow("桌面歌词", "在屏幕底部显示可拖动的浮动歌词", lyricsSwitch));
+
+        var presetNames = new List<string> { "关闭" };
+        presetNames.AddRange(_player?.EqualizerPresets ?? Array.Empty<string>());
+        var equalizerBox = new ComboBox
+        {
+            ItemsSource = presetNames,
+            SelectedIndex = Math.Clamp(_config.EqPresetIndex + 1, 0, presetNames.Count - 1),
+            Width = 170,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        equalizerBox.SelectionChanged += (_, _) =>
+        {
+            _config.EqPresetIndex = equalizerBox.SelectedIndex - 1;
+            _player?.ApplyEqualizer(_config.EqPresetIndex);
+            _config.Save();
+        };
+        body.Children.Add(BuildSettingRow("均衡器", "使用播放器内置的音效预设", equalizerBox));
+
         return MakeSettingsCard(body);
     }
 
@@ -931,26 +1430,33 @@ public partial class MainWindow : Window
     {
         var mode = string.IsNullOrWhiteSpace(_config.BackgroundMode) ? "cover" : _config.BackgroundMode;
         var material = string.IsNullOrWhiteSpace(_config.Material) ? "off" : _config.Material;
-        var useMaterial = material != "off";
+        // Windows 10 不支持 Mica / Acrylic 背景，强制退回纯色，避免透出黑块
+        var useMaterial = material != "off" && IsWindows11;
         var opacity = Math.Clamp(_config.UiOpacity <= 0 ? 0.75 : _config.UiOpacity, 0.3, 1.0);
 
-        var page = Color.Parse(IsLight
-            ? mode switch
-            {
-                "black" => "#FFFFFF",
-                "gray" => "#F0F0F5",
-                "navy" => "#E8EFFA",
-                "wine" => "#FAF5EE",
-                _ => "#F5F5F9"
-            }
-            : mode switch
-            {
-                "black" => "#0B0B0E",
-                "gray" => "#17171C",
-                "navy" => "#101A2E",
-                "wine" => "#1A1112",
-                _ => "#0B0B0E"
-            });
+        var customColor = Color.TryParse(_config.BackgroundCustomColor, out var parsedCustom)
+            ? parsedCustom
+            : Color.Parse(IsLight ? "#F5F5F9" : "#0B0B0E");
+
+        var page = mode == "custom"
+            ? customColor
+            : Color.Parse(IsLight
+                ? mode switch
+                {
+                    "black" => "#FFFFFF",
+                    "gray" => "#F0F0F5",
+                    "navy" => "#E8EFFA",
+                    "wine" => "#FAF5EE",
+                    _ => "#F5F5F9"
+                }
+                : mode switch
+                {
+                    "black" => "#0B0B0E",
+                    "gray" => "#17171C",
+                    "navy" => "#101A2E",
+                    "wine" => "#1A1112",
+                    _ => "#0B0B0E"
+                });
 
         var themePage = Color.Parse(IsLight ? "#F5F5F9" : "#0B0B0E");
         // 材质与背景可叠加：跟随封面时底色取自封面平均色，纯色时用所选颜色
@@ -1012,11 +1518,13 @@ public partial class MainWindow : Window
 
         SidebarPane.Background = new SolidColorBrush(sideColor, sideAlpha);
         PlayerBar.Background = new SolidColorBrush(playerColor, playerAlpha);
-        // 播放列表是浮在内容上的面板：沿用侧边栏的底色并稍作提亮、提高不透明度，
-        // 这样在浅色/深色、纯色/封面/材质各种组合下都不会变成一块突兀的灰板
-        var panelColor = BlendColor(sideColor, Colors.White, IsLight ? 0.0 : 0.05);
-        var panelAlpha = useMaterial ? Math.Min(1.0, sideAlpha + 0.2) : (IsLight ? 0.98 : 0.94);
-        QueuePanel.Background = new SolidColorBrush(panelColor, panelAlpha);
+        // 播放列表与加歌抽屉：和播放栏旁的胶囊按钮保持同一种半透明白玻璃质感，
+        // 不再使用由侧边栏派生的灰蓝色面板
+        var panelBrush = IsLight
+            ? new SolidColorBrush(Color.Parse("#F2F2F7"), 0.97)
+            : new SolidColorBrush(Colors.White, 0.10);
+        QueuePanel.Background = panelBrush;
+        PickerPanel.Background = panelBrush;
 
         if (useMaterial)
         {
@@ -1312,6 +1820,10 @@ public partial class MainWindow : Window
         _pageLoadCts?.Dispose();
         _pageLoadCts = new CancellationTokenSource();
 
+        // 离开当前歌单时收起「添加歌曲」抽屉
+        if (PickerPanel.IsVisible) HidePickerDrawer();
+        _searchListScroll = null;
+
         ContentPanel.Children.Clear();
         ListHeader.Children.Clear();
         ListRows.Children.Clear();
@@ -1321,23 +1833,14 @@ public partial class MainWindow : Window
         _rowNumbers.Clear();
     }
 
-    Control BuildPageHeader(string title, string? subtitle, Control? action)
+    /// <summary>页面顶部只保留右上角操作按钮，标题与副标题已从界面移除。</summary>
+    Control? BuildPageHeader(string title, string? subtitle, Control? action)
     {
+        if (action is null) return null;
+
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), VerticalAlignment = VerticalAlignment.Center };
-        var stack = new StackPanel { Spacing = 5 };
-        stack.Children.Add(new TextBlock { Text = title, FontSize = 26, FontWeight = FontWeight.Bold, Foreground = TextPrimary });
-        if (!string.IsNullOrWhiteSpace(subtitle))
-        {
-            stack.Children.Add(new TextBlock { Text = subtitle, FontSize = 12.5, Foreground = TextSecondary });
-        }
-        head.Children.Add(stack);
-
-        if (action is not null)
-        {
-            Grid.SetColumn(action, 1);
-            head.Children.Add(action);
-        }
-
+        Grid.SetColumn(action, 1);
+        head.Children.Add(action);
         return head;
     }
 
@@ -1346,30 +1849,43 @@ public partial class MainWindow : Window
     void BeginPage(string title, string? subtitle = null, Control? action = null)
     {
         ResetPageContent();
-        _infiniteLibrary = false;
-        _libraryFooter = null;
+        _currentPlaylist = null;
+        _pagedActive = false;
+        _pagedFooter = null;
+        _gridActive = false;
+        _gridFooter = null;
+        _gridVersion++;
         ContentScroll.IsVisible = true;
         ListPageHost.IsVisible = false;
         _pageHost = ContentPanel;
 
-        ContentPanel.Children.Add(BuildPageHeader(title, subtitle, action));
-        ContentPanel.Children.Add(BuildPageDivider());
+        if (BuildPageHeader(title, subtitle, action) is { } header)
+        {
+            ContentPanel.Children.Add(header);
+            ContentPanel.Children.Add(BuildPageDivider());
+        }
 
         ScrollToTop();
     }
 
-    /// <summary>列表页：标题与操作区域固定，只让曲目列表滚动。</summary>
+    /// <summary>列表页：操作区域固定，只让曲目列表滚动。</summary>
     void BeginListPage(string title, string? subtitle = null, Control? action = null)
     {
         ResetPageContent();
-        _infiniteLibrary = false;
-        _libraryFooter = null;
+        _pagedActive = false;
+        _pagedFooter = null;
+        _gridActive = false;
+        _gridFooter = null;
+        _gridVersion++;
         ContentScroll.IsVisible = false;
         ListPageHost.IsVisible = true;
         _pageHost = ListRows;
 
-        ListHeader.Children.Add(BuildPageHeader(title, subtitle, action));
-        ListHeader.Children.Add(BuildPageDivider());
+        if (BuildPageHeader(title, subtitle, action) is { } header)
+        {
+            ListHeader.Children.Add(header);
+            ListHeader.Children.Add(BuildPageDivider());
+        }
 
         ScrollToTop();
     }
@@ -1383,6 +1899,17 @@ public partial class MainWindow : Window
             ContentScroll.Offset = new Vector(0, 0);
             ListScroll.Offset = new Vector(0, 0);
         }, DispatcherPriority.Background);
+    }
+
+    /// <summary>搜索结果列表占据内容区剩余高度，页面本身不滚动。</summary>
+    void UpdateSearchListHeight()
+    {
+        var scroll = _searchListScroll;
+        if (scroll is null || scroll.Parent is null) return;
+        var top = scroll.TranslatePoint(new Point(0, 0), ContentScroll)?.Y ?? 0;
+        var height = ContentScroll.Bounds.Height - top - 12;
+        if (height <= 0) return;
+        scroll.Height = Math.Max(240, height);
     }
 
     void AddSection(string title, int? count = null)
@@ -1713,14 +2240,32 @@ public partial class MainWindow : Window
         heart.PointerPressed += (_, e) => e.Handled = true;
         heart.Click += async (_, _) => await ToggleFavoriteAsync(track, heartIcon);
 
-        var plus = new Button
+        // 歌单详情页里把「加入歌单」换成「移出歌单」
+        Button action;
+        if (_currentPlaylist is not null)
         {
-            Content = MakeIcon(Symbol.AddCircle, 15, IconIdle),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        plus.Classes.Add("tool");
-        plus.PointerPressed += (_, e) => e.Handled = true;
-        plus.Click += async (_, _) => await AddToPlaylistAsync(track);
+            action = new Button
+            {
+                Content = MakeIcon(Symbol.SubtractCircle, 15, IconIdle),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            ToolTip.SetTip(action, "从歌单移除");
+            action.Classes.Add("tool");
+            action.PointerPressed += (_, e) => e.Handled = true;
+            action.Click += async (_, _) => await RemoveFromCurrentPlaylistAsync(track);
+        }
+        else
+        {
+            action = new Button
+            {
+                Content = MakeIcon(Symbol.AddCircle, 15, IconIdle),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            ToolTip.SetTip(action, "加入歌单");
+            action.Classes.Add("tool");
+            action.PointerPressed += (_, e) => e.Handled = true;
+            action.Click += async (_, _) => await AddToPlaylistAsync(track);
+        }
 
         var grid = new Grid
         {
@@ -1736,8 +2281,8 @@ public partial class MainWindow : Window
         grid.Children.Add(duration);
         Grid.SetColumn(heart, 4);
         grid.Children.Add(heart);
-        Grid.SetColumn(plus, 5);
-        grid.Children.Add(plus);
+        Grid.SetColumn(action, 5);
+        grid.Children.Add(action);
 
         var row = new Border
         {
@@ -1839,37 +2384,39 @@ public partial class MainWindow : Window
     {
         _mode = Mode.Albums;
         SetActiveNav(NavAlbums);
-        BeginPage("专辑", "正在加载…");
+        BeginPage("专辑", "按专辑浏览曲库");
+        _albums = new List<Album>();
 
-        try
+        var panel = new WrapPanel { Margin = new Thickness(-4, 6, 0, 0) };
+        ContentPanel.Children.Add(panel);
+        _gridPanel = panel;
+
+        StartGridPaging(p => Api().GetAlbumsAsync(p, 200), (doc, pending) =>
         {
-            using var doc = await Api().GetAlbumsAsync(1, 200);
-            _albums = Library.ParseAlbums(doc);
-
-            ContentPanel.Children.Clear();
-            BeginPage("专辑", $"共 {_albums.Count} 张专辑");
-
-            var pending = new List<(string?, Image)>();
-            var panel = new WrapPanel { Margin = new Thickness(-4, 6, 0, 0) };
-            foreach (var album in _albums)
+            var batch = Library.ParseAlbums(doc);
+            _albums.AddRange(batch);
+            var controls = new List<Control>();
+            foreach (var album in batch)
             {
-                panel.Children.Add(BuildCard(album.Name, album.Artist, album.CoverId,
+                controls.Add(BuildCard(album.Name, album.Artist, album.CoverId,
                     () => OpenAlbumAsync(album), pending));
             }
-            ContentPanel.Children.Add(panel);
-            _ = LoadCardCoversAsync(pending);
+            return controls;
+        }, "张专辑");
 
-            StatusText.Text = $"专辑 {_albums.Count} 张";
-            var first = _albums.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.CoverId));
-            if (first is not null)
-            {
-                _ = SetBackdropAsync(first.CoverId);
-            }
-        }
-        catch (Exception ex)
+        await LoadGridPageAsync();
+
+        if (_albums.Count == 0)
         {
-            HandleError(ex, "加载专辑失败");
+            AddEmptyState("暂无专辑", "曲库还没有专辑信息", Symbol.Album);
         }
+        else
+        {
+            var first = _albums.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.CoverId));
+            if (first is not null) _ = SetBackdropAsync(first.CoverId);
+        }
+
+        StatusText.Text = $"专辑 {_albums.Count} 张";
     }
 
     async Task SetBackdropAsync(string? coverId)
@@ -1886,11 +2433,10 @@ public partial class MainWindow : Window
 
         try
         {
-            using var doc = await Api().GetTracksByAlbumAsync(album.Guid);
-            _tracks = Library.ParseTracks(doc);
-            _mode = Mode.Tracks;
-            BeginListPage(album.Name, $"专辑 · {album.Artist} · {_tracks.Count} 首", BuildDetailActions(back, _tracks));
-            AddTrackRows(_tracks, _tracks);
+            StartPagedTracks(p => Api().GetTracksByAlbumAsync(album.Guid, p, 200),
+                album.Name, $"专辑 · {album.Artist} · ", Mode.Tracks);
+            _pagedAction = BuildDetailActions(back, _tracks);
+            await LoadPagedPageAsync();
             if (_tracks.Count == 0) AddEmptyState("暂无歌曲", "这张专辑还没有曲目", Symbol.MusicNote2);
             StatusText.Text = $"{album.Name} · {_tracks.Count} 首";
             _ = SetBackdropAsync(album.CoverId);
@@ -1903,58 +2449,80 @@ public partial class MainWindow : Window
 
     async Task LoadAllTracksAsync()
     {
-        _mode = Mode.Tracks;
         SetActiveNav(NavLibrary);
-        BeginListPage("全部歌曲", "正在加载…");
-        _infiniteLibrary = true;
-        _libraryPage = 0;
-        _libraryTotal = -1;
-        _librarySeen.Clear();
+        StartPagedTracks(p => Api().GetTracksAsync(p, 200), "全部歌曲", string.Empty, Mode.Tracks);
+        await LoadPagedPageAsync();
+    }
+
+    /// <summary>开始一个可无限滚动的曲目列表：先清空状态，首屏数据由 LoadPagedPageAsync 拉取。</summary>
+    void StartPagedTracks(Func<int, Task<JsonDocument>> fetch, string title, string subtitlePrefix, Mode mode)
+    {
+        _mode = mode;
+        _currentPlaylist = null;
+        _pagedFetch = fetch;
+        _pagedTitle = title;
+        _pagedSubtitle = subtitlePrefix;
+        _pagedAction = null;
+        _pagedActive = true;
+        _pagedPage = 0;
+        _pagedTotal = -1;
+        _pagedSeen.Clear();
+        _pagedFooter = null;
+        _pagedEmpty = false;
         _tracks = new List<Track>();
-        await LoadLibraryPageAsync();
+        BeginListPage(title, string.IsNullOrEmpty(subtitlePrefix) ? "正在加载…" : subtitlePrefix + "正在加载…");
+        _pagedActive = true;
     }
 
     void OnListScrolled()
     {
-        if (!_infiniteLibrary || _libraryLoading) return;
-        if (_libraryTotal >= 0 && _tracks.Count >= _libraryTotal) return;
+        if (!_pagedActive || _pagedLoading) return;
+        if (_pagedTotal >= 0 && _tracks.Count >= _pagedTotal) return;
         if (ListScroll.Extent.Height <= 0) return;
 
         if (ListScroll.Offset.Y + ListScroll.Viewport.Height >= ListScroll.Extent.Height - 160)
         {
-            _ = LoadLibraryPageAsync();
+            _ = LoadPagedPageAsync();
         }
     }
 
-    async Task LoadLibraryPageAsync()
+    async Task LoadPagedPageAsync()
     {
-        if (_libraryLoading) return;
-        if (_libraryTotal >= 0 && _tracks.Count >= _libraryTotal) return;
+        if (!_pagedActive || _pagedLoading || _pagedFetch is null) return;
+        if (_pagedTotal >= 0 && _tracks.Count >= _pagedTotal) return;
 
         var token = _pageLoadCts?.Token;
-        _libraryLoading = true;
-        RefreshLibraryFooter();
+        _pagedLoading = true;
+        RefreshPagedFooter();
 
         try
         {
-            _libraryPage++;
-            using var doc = await Api().GetTracksAsync(_libraryPage, 200);
+            _pagedPage++;
+            using var doc = await _pagedFetch(_pagedPage);
             if (token is { IsCancellationRequested: true }) return;
 
             var batch = Library.ParseTracks(doc);
             if (batch.Count == 0)
             {
-                if (_libraryTotal < 0) _libraryTotal = _tracks.Count;
+                if (_pagedTotal < 0) _pagedTotal = _tracks.Count;
+                if (_tracks.Count == 0)
+                {
+                    // 第一页就是空列表：仍要构建带操作按钮的页头，否则返回/添加歌曲会缺失
+                    _pagedEmpty = true;
+                    BeginListPage(_pagedTitle, $"{_pagedSubtitle}共 0 首",
+                        _pagedAction ?? CreatePlayAllAction(_tracks));
+                    _pagedActive = true;
+                }
                 return;
             }
 
-            if (_libraryTotal < 0) _libraryTotal = PageTotal(doc);
+            if (_pagedTotal < 0) _pagedTotal = PageTotal(doc);
 
             var added = new List<Track>();
             var startIndex = _tracks.Count;
             foreach (var track in batch)
             {
-                if (!_librarySeen.Add(track.Guid)) continue;
+                if (!_pagedSeen.Add(track.Guid)) continue;
                 _tracks.Add(track);
                 added.Add(track);
             }
@@ -1962,15 +2530,22 @@ public partial class MainWindow : Window
             if (startIndex == 0)
             {
                 // 第一页拿到后确定标题与总数，再逐页追加
-                BeginListPage("全部歌曲",
-                    _libraryTotal >= 0 ? $"共 {_libraryTotal} 首" : $"已加载 {_tracks.Count} 首",
-                    CreatePlayAllAction(_tracks));
-                _infiniteLibrary = true;
+                var subtitle = _pagedTotal >= 0
+                    ? $"{_pagedSubtitle}共 {_pagedTotal} 首"
+                    : $"{_pagedSubtitle}已加载 {_tracks.Count} 首";
+                BeginListPage(_pagedTitle, subtitle, _pagedAction ?? CreatePlayAllAction(_tracks));
+                _pagedActive = true;
                 AddTrackRows(_tracks, _tracks);
             }
             else if (added.Count > 0)
             {
                 AddTrackRows(added, _tracks, startIndex);
+            }
+
+            // 收藏列表：把已加载页的收藏同步到本地集合，保证心形状态正确
+            if (_mode == Mode.Favorites)
+            {
+                foreach (var track in added) _favorites.Add(track.Guid);
             }
         }
         catch (Exception ex)
@@ -1979,16 +2554,22 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _libraryLoading = false;
-            RefreshLibraryFooter();
+            _pagedLoading = false;
+            RefreshPagedFooter();
         }
     }
 
-    void RefreshLibraryFooter()
+    void RefreshPagedFooter()
     {
-        if (!_infiniteLibrary) return;
+        if (!_pagedActive) return;
 
-        _libraryFooter ??= new TextBlock
+        if (_pagedEmpty)
+        {
+            if (_pagedFooter?.Parent is Panel emptyParent) emptyParent.Children.Remove(_pagedFooter);
+            return;
+        }
+
+        _pagedFooter ??= new TextBlock
         {
             FontSize = 11.5,
             Foreground = TextMuted,
@@ -1996,15 +2577,125 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 14, 0, 6)
         };
 
-        if (_libraryFooter.Parent is Panel parent) parent.Children.Remove(_libraryFooter);
+        if (_pagedFooter.Parent is Panel parent) parent.Children.Remove(_pagedFooter);
 
-        _libraryFooter.Text = _libraryLoading
+        _pagedFooter.Text = _pagedLoading
             ? "正在加载…"
-            : _libraryTotal >= 0 && _tracks.Count >= _libraryTotal
+            : _pagedTotal >= 0 && _tracks.Count >= _pagedTotal
                 ? $"已加载全部 {_tracks.Count} 首"
                 : "滚动到底部加载更多";
 
-        _pageHost.Children.Add(_libraryFooter);
+        _pageHost.Children.Add(_pagedFooter);
+    }
+
+    // ---- 卡片网格分页（专辑 / 风格 / 歌手）----
+
+    /// <summary>开始网格分页：调用前需先把承载卡片的 Panel 加入页面并赋给 _gridPanel。</summary>
+    void StartGridPaging(Func<int, Task<JsonDocument>> fetch,
+        Func<JsonDocument, List<(string?, Image)>, List<Control>> build, string unit)
+    {
+        _gridFetch = fetch;
+        _gridBuild = build;
+        _gridUnit = unit;
+        _gridPage = 0;
+        _gridTotal = -1;
+        _gridLoaded = 0;
+        _gridLoading = false;
+        _gridActive = true;
+        if (_gridFooter?.Parent is Panel oldFooterParent) oldFooterParent.Children.Remove(_gridFooter);
+        _gridFooter = null;
+        _gridVersion++;
+    }
+
+    void OnContentScrolled()
+    {
+        if (!_gridActive || _gridLoading) return;
+        if (_gridTotal >= 0 && _gridLoaded >= _gridTotal) return;
+        if (ContentScroll.Extent.Height <= 0) return;
+
+        if (ContentScroll.Offset.Y + ContentScroll.Viewport.Height >= ContentScroll.Extent.Height - 220)
+        {
+            _ = LoadGridPageAsync();
+        }
+    }
+
+    async Task LoadGridPageAsync()
+    {
+        if (!_gridActive || _gridLoading || _gridFetch is null || _gridBuild is null || _gridPanel is null) return;
+        if (_gridTotal >= 0 && _gridLoaded >= _gridTotal) return;
+
+        var token = _pageLoadCts?.Token;
+        var version = _gridVersion;
+        var fetch = _gridFetch;
+        var build = _gridBuild;
+        var panel = _gridPanel;
+        _gridLoading = true;
+        RefreshGridFooter();
+
+        try
+        {
+            _gridPage++;
+            using var doc = await fetch(_gridPage);
+            if (version != _gridVersion) return;
+            if (token is { IsCancellationRequested: true }) return;
+
+            if (_gridTotal < 0) _gridTotal = PageTotal(doc);
+
+            var pending = new List<(string?, Image)>();
+            var controls = build(doc, pending);
+            if (controls.Count == 0)
+            {
+                // 没有更多数据：停止继续请求
+                _gridTotal = _gridLoaded;
+                return;
+            }
+
+            foreach (var control in controls) panel.Children.Add(control);
+            _gridLoaded += controls.Count;
+
+            if (pending.Count > 0) _ = LoadCardCoversAsync(pending);
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "加载更多失败");
+        }
+        finally
+        {
+            if (version == _gridVersion)
+            {
+                _gridLoading = false;
+                RefreshGridFooter();
+            }
+        }
+    }
+
+    void RefreshGridFooter()
+    {
+        if (!_gridActive || _gridPanel is null) return;
+
+        if (_gridLoaded == 0 && !_gridLoading)
+        {
+            if (_gridFooter?.Parent is Panel emptyParent) emptyParent.Children.Remove(_gridFooter);
+            return;
+        }
+
+        _gridFooter ??= new TextBlock
+        {
+            FontSize = 11.5,
+            Foreground = TextMuted,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 10, 0, 6)
+        };
+
+        if (_gridFooter.Parent is Panel parent) parent.Children.Remove(_gridFooter);
+
+        _gridFooter.Text = _gridLoading
+            ? "正在加载…"
+            : _gridTotal >= 0 && _gridLoaded >= _gridTotal
+                ? $"已加载全部 {_gridLoaded} {_gridUnit}"
+                : $"已加载 {_gridLoaded} {_gridUnit}，滚动到底部加载更多";
+
+        _pageHost.Children.Add(_gridFooter);
     }
 
     static int PageTotal(JsonDocument doc)
@@ -2021,23 +2712,11 @@ public partial class MainWindow : Window
 
     async Task LoadHistoryAsync()
     {
-        _mode = Mode.History;
         SetActiveNav(NavRecent);
-        BeginListPage("最近播放", "正在加载…");
-        try
-        {
-            using var doc = await Api().GetPlayHistoryAsync(1, 200);
-            _tracks = Library.ParseTracks(doc);
-            ContentPanel.Children.Clear();
-            BeginListPage("最近播放", $"共 {_tracks.Count} 首", CreatePlayAllAction(_tracks));
-            AddTrackRows(_tracks, _tracks);
-            if (_tracks.Count == 0) AddEmptyState("暂无播放记录", "在飞牛音乐中播放过的歌曲会出现在这里", Symbol.Clock);
-            StatusText.Text = $"最近 {_tracks.Count} 首";
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "加载历史失败");
-        }
+        StartPagedTracks(p => Api().GetPlayHistoryAsync(p, 200), "最近播放", string.Empty, Mode.History);
+        await LoadPagedPageAsync();
+        if (_tracks.Count == 0) AddEmptyState("暂无播放记录", "在飞牛音乐中播放过的歌曲会出现在这里", Symbol.Clock);
+        StatusText.Text = $"最近 {_tracks.Count} 首";
     }
 
     async Task LoadGenresAsync()
@@ -2045,25 +2724,25 @@ public partial class MainWindow : Window
         _mode = Mode.Genres;
         SetActiveNav(NavGenres);
         BeginPage("风格", "按风格浏览曲库");
-        try
-        {
-            using var doc = await Api().GetGenresAsync(1, 200);
-            _genres = Library.ParseGenres(doc);
+        _genres = new List<Genre>();
 
-            var panel = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-            foreach (var genre in _genres)
-            {
-                panel.Children.Add(BuildGenreCard(genre));
-            }
-            ContentPanel.Children.Add(panel);
+        var panel = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+        ContentPanel.Children.Add(panel);
+        _gridPanel = panel;
 
-            if (_genres.Count == 0) AddEmptyState("暂无流派", "曲库还没有分类信息", Symbol.MusicNote2);
-            StatusText.Text = $"风格 {_genres.Count} 个";
-        }
-        catch (Exception ex)
+        StartGridPaging(p => Api().GetGenresAsync(p, 200), (doc, pending) =>
         {
-            HandleError(ex, "加载流派失败");
-        }
+            var batch = Library.ParseGenres(doc);
+            _genres.AddRange(batch);
+            var controls = new List<Control>();
+            foreach (var genre in batch) controls.Add(BuildGenreCard(genre));
+            return controls;
+        }, "个风格");
+
+        await LoadGridPageAsync();
+
+        if (_genres.Count == 0) AddEmptyState("暂无流派", "曲库还没有分类信息", Symbol.MusicNote2);
+        StatusText.Text = $"风格 {_genres.Count} 个";
     }
 
     Control BuildGenreCard(Genre genre)
@@ -2104,11 +2783,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            using var doc = await Api().GetTracksByGenreAsync(genre.Guid);
-            _tracks = Library.ParseTracks(doc);
-            _mode = Mode.Tracks;
-            BeginListPage(genre.Name, $"风格 · {_tracks.Count} 首", BuildDetailActions(LoadGenresAsync, _tracks));
-            AddTrackRows(_tracks, _tracks);
+            StartPagedTracks(p => Api().GetTracksByGenreAsync(genre.Guid, p, 200),
+                genre.Name, "风格 · ", Mode.Tracks);
+            _pagedAction = BuildDetailActions(LoadGenresAsync, _tracks);
+            await LoadPagedPageAsync();
             if (_tracks.Count == 0) AddEmptyState("暂无歌曲", "这个流派下还没有曲目", Symbol.MusicNote2);
         }
         catch (Exception ex)
@@ -2124,11 +2802,10 @@ public partial class MainWindow : Window
 
         try
         {
-            using var doc = await Api().GetTracksByArtistAsync(artist.Guid);
-            _tracks = Library.ParseTracks(doc);
-            _mode = Mode.Tracks;
-            BeginListPage(artist.Name, $"歌手 · {_tracks.Count} 首", BuildDetailActions(back, _tracks));
-            AddTrackRows(_tracks, _tracks);
+            StartPagedTracks(p => Api().GetTracksByArtistAsync(artist.Guid, p, 200),
+                artist.Name, "歌手 · ", Mode.Tracks);
+            _pagedAction = BuildDetailActions(back, _tracks);
+            await LoadPagedPageAsync();
             if (_tracks.Count == 0) AddEmptyState("暂无歌曲", "这位歌手还没有曲目", Symbol.MusicNote2);
             _ = SetBackdropAsync(artist.CoverId);
         }
@@ -2147,7 +2824,10 @@ public partial class MainWindow : Window
         if (_roaming && _roamId is not null && _currentTrack is not null)
         {
             BeginPage("漫游", "根据收藏与播放记录持续推荐");
+            _roamQueueSection = null;
+            if (!_roamTracks.Any(track => track.Guid == _currentTrack.Guid)) _roamTracks.Add(_currentTrack);
             BuildRoamHero(_currentTrack);
+            BuildRoamQueueSection();
             StatusText.Text = "漫游进行中";
             return;
         }
@@ -2168,8 +2848,12 @@ public partial class MainWindow : Window
             _roamId = result.Value.RoamId;
             _queue = new List<Track> { result.Value.Track };
             _queueIndex = 0;
+            _roamTracks.Clear();
+            _roamTracks.Add(result.Value.Track);
+            _roamQueueSection = null;
 
             BuildRoamHero(result.Value.Track);
+            BuildRoamQueueSection();
             PlayTrack(result.Value.Track);
             StatusText.Text = "漫游已开始";
         }
@@ -2340,6 +3024,127 @@ public partial class MainWindow : Window
         _ = SetBackdropAsync(track.CoverId);
     }
 
+    /// <summary>漫游页下方展示本次漫游已走过的曲目队列，点卡片可直接切换播放。</summary>
+    void BuildRoamQueueSection()
+    {
+        if (_roamQueueSection is not null && _roamQueueSection.Parent is Panel oldParent)
+        {
+            oldParent.Children.Remove(_roamQueueSection);
+        }
+        _roamQueueSection = null;
+
+        if (_roamTracks.Count == 0) return;
+
+        var section = new StackPanel { Spacing = 8, Margin = new Thickness(0, 28, 0, 0) };
+
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        header.Children.Add(new TextBlock
+        {
+            Text = "漫游队列",
+            FontSize = 15,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = TextPrimary
+        });
+        header.Children.Add(new TextBlock
+        {
+            Text = $"{_roamTracks.Count} 首 · 点击切换",
+            FontSize = 11,
+            Foreground = TextMuted,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 0, 2)
+        });
+        section.Children.Add(header);
+
+        var strip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 2, 0, 0) };
+        for (var i = 0; i < _roamTracks.Count; i++)
+        {
+            strip.Children.Add(BuildRoamQueueCard(_roamTracks[i], i));
+        }
+
+        section.Children.Add(new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Content = strip
+        });
+
+        ContentPanel.Children.Add(section);
+        _roamQueueSection = section;
+    }
+
+    Control BuildRoamQueueCard(Track track, int index)
+    {
+        var isCurrent = _currentTrack is not null && _currentTrack.Guid == track.Guid;
+
+        var image = new Image { Stretch = Stretch.UniformToFill };
+        var coverGrid = new Grid();
+        coverGrid.Children.Add(MakeIcon(Symbol.MusicNote2, 24, EmptyIcon));
+        coverGrid.Children.Add(image);
+
+        var cover = new Border
+        {
+            Width = 148,
+            Height = 148,
+            CornerRadius = new CornerRadius(12),
+            ClipToBounds = true,
+            Background = CoverPlaceholder,
+            BorderThickness = new Thickness(isCurrent ? 2 : 0),
+            BorderBrush = isCurrent ? AccentSoft : Brushes.Transparent,
+            Child = coverGrid
+        };
+
+        var texts = new StackPanel { Spacing = 1, Margin = new Thickness(0, 7, 0, 0) };
+        texts.Children.Add(new TextBlock
+        {
+            Text = track.Title,
+            FontSize = 12,
+            Foreground = TextPrimary,
+            MaxWidth = 148,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        texts.Children.Add(new TextBlock
+        {
+            Text = isCurrent ? "正在播放" : track.Artist,
+            FontSize = 10.5,
+            Foreground = isCurrent ? AccentSoft : TextMuted,
+            MaxWidth = 148,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+
+        var stack = new StackPanel();
+        stack.Children.Add(cover);
+        stack.Children.Add(texts);
+
+        var card = new Border
+        {
+            Width = 156,
+            Padding = new Thickness(4),
+            CornerRadius = new CornerRadius(12),
+            Background = Brushes.Transparent,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Child = stack
+        };
+        card.PointerEntered += (_, _) => card.Background = RowHover;
+        card.PointerExited += (_, _) => card.Background = Brushes.Transparent;
+        card.PointerPressed += (_, _) =>
+        {
+            PlayFromQueue(_roamTracks, index);
+            _queue = new List<Track>(_roamTracks);
+            _queueIndex = index;
+            SyncRoamHero(_roamTracks[index]);
+            BuildRoamQueueSection();
+        };
+
+        _ = AssignRoamQueueCoverAsync(image, track.CoverId);
+        return card;
+    }
+
+    async Task AssignRoamQueueCoverAsync(Image image, string? coverId)
+    {
+        var bitmap = await GetCoverAsync(coverId, 160);
+        if (bitmap is not null) image.Source = bitmap;
+    }
+
     async Task<bool> RoamStepAsync(int dir)
     {
         if (_roamId is null)
@@ -2361,7 +3166,13 @@ public partial class MainWindow : Window
             _queue = new List<Track> { result.Value.Track };
             _queueIndex = 0;
 
+            if (!_roamTracks.Any(track => track.Guid == result.Value.Track.Guid))
+            {
+                _roamTracks.Add(result.Value.Track);
+            }
+
             SyncRoamHero(result.Value.Track);
+            BuildRoamQueueSection();
             PlayTrack(result.Value.Track);
             return true;
         }
@@ -2374,26 +3185,12 @@ public partial class MainWindow : Window
 
     async Task LoadFavoritesAsync()
     {
-        _mode = Mode.Favorites;
         SetActiveNav(NavFavorites);
-        BeginListPage("我的收藏", "正在加载…");
-        try
-        {
-            using var doc = await Api().GetFavoritesAsync();
-            _tracks = Library.ParseTracks(doc);
-            _favorites.Clear();
-            foreach (var track in _tracks) _favorites.Add(track.Guid);
-
-            ContentPanel.Children.Clear();
-            BeginListPage("我的收藏", $"共 {_tracks.Count} 首", CreatePlayAllAction(_tracks));
-            AddTrackRows(_tracks, _tracks);
-            if (_tracks.Count == 0) AddEmptyState("还没有收藏", "点击歌曲右侧的心形图标即可收藏", Symbol.Heart);
-            StatusText.Text = $"收藏 {_tracks.Count} 首";
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "加载收藏失败");
-        }
+        _favorites.Clear();
+        StartPagedTracks(p => Api().GetFavoritesAsync(p, 200), "我的收藏", string.Empty, Mode.Favorites);
+        await LoadPagedPageAsync();
+        if (_tracks.Count == 0) AddEmptyState("还没有收藏", "点击歌曲右侧的心形图标即可收藏", Symbol.Heart);
+        StatusText.Text = $"收藏 {_tracks.Count} 首";
     }
 
     async Task RefreshFavoriteGuidsAsync()
@@ -2463,7 +3260,17 @@ public partial class MainWindow : Window
                     }
                 }
             };
+            var menu = new ContextMenu();
+            var renameItem = new MenuItem { Header = "重命名歌单" };
+            renameItem.Click += async (_, _) => await RenamePlaylistAsync(playlist);
+            var deleteItem = new MenuItem { Header = "删除歌单" };
+            deleteItem.Click += async (_, _) => await DeletePlaylistAsync(playlist);
+            menu.Items.Add(renameItem);
+            menu.Items.Add(deleteItem);
+            button.ContextMenu = menu;
+
             button.Classes.Add("nav");
+            ToolTip.SetTip(button, "点击打开 · 右键可重命名/删除");
             button.Click += async (_, _) => await OpenPlaylistAsync(playlist);
             SidebarPlaylists.Children.Add(button);
         }
@@ -2493,13 +3300,59 @@ public partial class MainWindow : Window
         }
     }
 
+    async Task RenamePlaylistAsync(Playlist playlist)
+    {
+        var name = await Dialogs.PromptAsync(this, "重命名歌单", playlist.Name, "歌单名称");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        name = name.Trim();
+        if (name == playlist.Name) return;
+
+        try
+        {
+            await Api().EditPlaylistAsync(playlist.Guid, name);
+            StatusText.Text = $"歌单已重命名为「{name}」";
+            await RefreshSidebarPlaylistsAsync();
+            if (_currentPlaylist?.Guid == playlist.Guid)
+            {
+                await OpenPlaylistAsync(new Playlist(playlist.Guid, name, playlist.TrackCount, playlist.CoverId));
+            }
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "重命名歌单失败");
+        }
+    }
+
+    async Task DeletePlaylistAsync(Playlist playlist)
+    {
+        var ok = await Dialogs.ConfirmAsync(this, "删除歌单",
+            $"确定删除歌单「{playlist.Name}」吗？歌单内的歌曲不会从曲库中删除。", "删除");
+        if (!ok) return;
+
+        try
+        {
+            await Api().DeletePlaylistAsync(playlist.Guid);
+            StatusText.Text = $"已删除歌单「{playlist.Name}」";
+            await RefreshSidebarPlaylistsAsync();
+            if (_currentPlaylist?.Guid == playlist.Guid)
+            {
+                _currentPlaylist = null;
+                await LoadHomeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "删除歌单失败");
+        }
+    }
+
     // ---- 首页 / 歌手 / 文件夹 ----
 
     async Task LoadHomeAsync()
     {
         _mode = Mode.Home;
         SetActiveNav(NavHome);
-        BeginPage("首页", "欢迎回来");
+        BeginPage("首页", string.Empty);
 
         var recent = new List<Track>();
         try
@@ -2545,9 +3398,9 @@ public partial class MainWindow : Window
             HandleError(ex, "加载最近添加歌曲失败");
         }
 
-        // 顶部四个入口卡片：封面拼贴 + 标题
+        // 顶部四个入口卡片：封面拼贴 + 标题，正方形并随宽度自适应
         var shortcutCovers = new List<(string?, Image)>();
-        var cards = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,*") };
+        var cards = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), ColumnSpacing = 12 };
 
         var roamCard = BuildHomeShortcutCard("漫游", recent.Select(track => track.CoverId), LoadRoamAsync, shortcutCovers);
         Grid.SetColumn(roamCard, 0);
@@ -2573,40 +3426,111 @@ public partial class MainWindow : Window
         cards.Children.Add(latestCard);
 
         ContentPanel.Children.Add(cards);
+
+        void FitSquareCards()
+        {
+            var width = (cards.Bounds.Width - 36) / 4;
+            if (width <= 0) return;
+            foreach (var child in cards.Children)
+            {
+                if (child is Border border) border.Height = width;
+            }
+        }
+        cards.SizeChanged += (_, _) => FitSquareCards();
+        Dispatcher.UIThread.Post(FitSquareCards, DispatcherPriority.Background);
+
         _ = LoadHomeCardCoversAsync(shortcutCovers);
 
+        // 下方分节改为 Tab：最近播放 / 最近添加歌曲 / 最近添加专辑
+        var definitions = new List<(string Label, Func<Control> Build)>();
         if (recent.Count > 0)
         {
-            AddSection("最近播放", recent.Count);
-            AddTrackRows(recent, recent);
+            definitions.Add(("最近播放", () => BuildTrackTab(recent)));
         }
-
-        if (albums.Count > 0)
-        {
-            AddSection("最近添加专辑", albums.Count);
-            var pending = new List<(string?, Image)>();
-            var panel = new WrapPanel { Margin = new Thickness(-4, 2, 0, 0) };
-            foreach (var album in albums)
-            {
-                panel.Children.Add(BuildCard(album.Name, album.Artist, album.CoverId,
-                    () => OpenAlbumAsync(album), pending));
-            }
-            ContentPanel.Children.Add(panel);
-            _ = LoadCardCoversAsync(pending);
-        }
-
         if (latest.Count > 0)
         {
-            AddSection("最近添加歌曲", latest.Count);
-            AddTrackRows(latest, latest);
+            definitions.Add(("最近添加歌曲", () => BuildTrackTab(latest)));
+        }
+        if (albums.Count > 0)
+        {
+            definitions.Add(("最近添加专辑", () =>
+            {
+                var pending = new List<(string?, Image)>();
+                var panel = new WrapPanel { Margin = new Thickness(-4, 2, 0, 0) };
+                foreach (var album in albums)
+                {
+                    panel.Children.Add(BuildCard(album.Name, album.Artist, album.CoverId,
+                        () => OpenAlbumAsync(album), pending));
+                }
+                _ = LoadCardCoversAsync(pending);
+                return panel;
+            }));
         }
 
-        if (recent.Count == 0 && albums.Count == 0 && latest.Count == 0)
+        if (definitions.Count == 0)
         {
             AddEmptyState("欢迎使用 25DogMusic", "去「音乐库」挑一首歌开始播放吧", Symbol.MusicNote2);
         }
+        else
+        {
+            var tabRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Margin = new Thickness(0, 18, 0, 4)
+            };
+            ContentPanel.Children.Add(tabRow);
+
+            var host = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+            ContentPanel.Children.Add(host);
+
+            var buttons = new Button[definitions.Count];
+            var contents = new Control?[definitions.Count];
+
+            void Activate(int index)
+            {
+                for (var i = 0; i < buttons.Length; i++)
+                {
+                    if (i == index) buttons[i].Classes.Add("active");
+                    else buttons[i].Classes.Remove("active");
+                }
+                host.Children.Clear();
+                contents[index] ??= definitions[index].Build();
+                host.Children.Add(contents[index]!);
+            }
+
+            for (var i = 0; i < definitions.Count; i++)
+            {
+                var index = i;
+                var button = new Button
+                {
+                    Content = new TextBlock
+                    {
+                        Text = definitions[i].Label,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                button.Classes.Add("searchtab");
+                button.Click += (_, _) => Activate(index);
+                buttons[i] = button;
+                tabRow.Children.Add(button);
+            }
+
+            Activate(0);
+        }
 
         StatusText.Text = "首页";
+    }
+
+    Control BuildTrackTab(List<Track> tracks)
+    {
+        var panel = new StackPanel { Spacing = 2, Margin = new Thickness(0, 2, 0, 0) };
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            panel.Children.Add(BuildTrackRow(tracks[i], tracks, i));
+        }
+        _ = LoadTrackCoversAsync(tracks);
+        return panel;
     }
 
     Control BuildHomeShortcutCard(string title, IEnumerable<string?> coverIds, Func<Task> onClick, List<(string?, Image)> pending)
@@ -2659,17 +3583,59 @@ public partial class MainWindow : Window
 
         var card = new Border
         {
-            Height = 112,
-            Margin = new Thickness(0, 0, 10, 0),
+            MinHeight = 96,
             CornerRadius = new CornerRadius(14),
             ClipToBounds = true,
             Background = CoverPlaceholder,
             Cursor = new Cursor(StandardCursorType.Hand),
-            Child = content
+            Child = content,
+            RenderTransform = new TranslateTransform(0, 0),
+            Transitions = new Transitions
+            {
+                new TransformOperationsTransition
+                {
+                    Property = RenderTransformProperty,
+                    Duration = TimeSpan.FromMilliseconds(180),
+                    Easing = new CubicEaseOut()
+                }
+            }
         };
 
+        card.PointerEntered += (_, _) =>
+        {
+            card.RenderTransform = new TranslateTransform(0, -5);
+            card.BoxShadow = BoxShadows.Parse("0 12 26 0 #4D000000");
+            card.Opacity = 1.0;
+        };
+        card.PointerExited += (_, _) =>
+        {
+            card.RenderTransform = new TranslateTransform(0, 0);
+            card.BoxShadow = default;
+        };
         card.PointerPressed += async (_, _) => await onClick();
         return card;
+    }
+
+    async Task LoadCoverSwatchAsync(Image image)
+    {
+        var coverId = _currentTrack?.CoverId;
+        if (string.IsNullOrWhiteSpace(coverId))
+        {
+            try
+            {
+                using var doc = await Api().GetAlbumsAsync(1, 20);
+                var albums = Library.ParseAlbums(doc);
+                if (albums.Count > 0) coverId = albums[Random.Shared.Next(albums.Count)].CoverId;
+            }
+            catch
+            {
+                // 取不到随机封面时保留渐变色块
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(coverId)) return;
+        var bitmap = await GetCoverAsync(coverId, 96);
+        if (bitmap is not null) image.Source = bitmap;
     }
 
     async Task LoadHomeCardCoversAsync(List<(string?, Image)> pending)
@@ -2688,37 +3654,167 @@ public partial class MainWindow : Window
         _mode = Mode.Artists;
         SetActiveNav(NavArtists);
         BeginPage("歌手", "按歌手浏览曲库");
+        var total = 0;
+
+        var panel = new StackPanel { Spacing = 2, Margin = new Thickness(0, 4, 0, 0) };
+        ContentPanel.Children.Add(panel);
+        _gridPanel = panel;
+
+        StartGridPaging(p => Api().GetArtistsAsync(p, 200), (doc, pending) =>
+        {
+            var batch = Library.ParseArtists(doc);
+            total += batch.Count;
+            var controls = new List<Control>();
+            foreach (var artist in batch) controls.Add(BuildArtistRow(artist, pending));
+            return controls;
+        }, "位歌手");
+
+        await LoadGridPageAsync();
+
+        if (total == 0) AddEmptyState("暂无歌手", "曲库还没有歌手信息", Symbol.MusicNote2);
+        StatusText.Text = $"歌手 {total} 位";
+    }
+
+    void ShowFoldersPage() => _ = LoadFolderRootsAsync();
+
+    /// <summary>文件夹首页：列出所有共享库作为浏览根目录。</summary>
+    async Task LoadFolderRootsAsync()
+    {
+        _mode = Mode.Folders;
+        _currentPlaylist = null;
+        SetActiveNav(NavFolders);
+        BeginListPage("文件夹", "从共享库开始按目录浏览");
 
         try
         {
-            using var doc = await Api().GetArtistsAsync(1, 200);
-            var artists = Library.ParseArtists(doc);
+            using var doc = await Api().GetSharedLibrariesAsync();
+            var libraries = Library.ParseSharedLibraries(doc);
 
-            var pending = new List<(string?, Image)>();
-            var panel = new StackPanel { Spacing = 2, Margin = new Thickness(0, 4, 0, 0) };
-            foreach (var artist in artists)
+            if (libraries.Count == 0)
             {
-                panel.Children.Add(BuildArtistRow(artist, pending));
+                AddEmptyState("暂无共享库", "在飞牛音乐里添加共享目录后即可在这里浏览", Symbol.Folder);
+                return;
             }
-            ContentPanel.Children.Add(panel);
-            _ = LoadCardCoversAsync(pending);
 
-            if (artists.Count == 0) AddEmptyState("暂无歌手", "曲库还没有歌手信息", Symbol.MusicNote2);
-            StatusText.Text = $"歌手 {artists.Count} 位";
+            foreach (var library in libraries)
+            {
+                ListRows.Children.Add(BuildFolderRow(library.Name, library.Path, 0,
+                    () => OpenFolderAsync(library.Path, library.Path)));
+            }
+
+            StatusText.Text = $"共享库 {libraries.Count} 个";
         }
         catch (Exception ex)
         {
-            HandleError(ex, "加载歌手失败");
+            HandleError(ex, "加载共享库失败");
         }
     }
 
-    void ShowFoldersPage()
+    /// <summary>打开某个目录：显示子文件夹和其中的歌曲。</summary>
+    async Task OpenFolderAsync(string path, string floor)
     {
         _mode = Mode.Folders;
+        _currentPlaylist = null;
         SetActiveNav(NavFolders);
-        BeginPage("文件夹", "按目录浏览音乐");
-        AddEmptyState("暂不支持文件夹浏览", "当前服务端接口没有提供目录列表，可先用「音乐库」或「专辑」浏览", Symbol.TextBulletList);
-        StatusText.Text = "文件夹功能待服务端支持";
+
+        try
+        {
+            using var doc = await Api().GetFolderViewAsync(path);
+            var folder = Library.ParseFolderView(doc);
+            if (folder is null)
+            {
+                BeginListPage("文件夹", path);
+                AddEmptyState("打不开文件夹", "服务端没有返回目录内容", Symbol.Folder);
+                return;
+            }
+
+            Func<Task> up = async () =>
+            {
+                if (path.TrimEnd('/') == floor.TrimEnd('/')) await LoadFolderRootsAsync();
+                else await OpenFolderAsync(ParentPath(path), floor);
+            };
+
+            BeginListPage(
+                string.IsNullOrWhiteSpace(folder.Name) ? path : folder.Name,
+                $"{folder.Path} · {folder.Tracks.Count} 首",
+                BuildDetailActions(up, folder.Tracks));
+
+            foreach (var sub in folder.Folders)
+            {
+                ListRows.Children.Add(BuildFolderRow(sub.Name, sub.Path, sub.ItemCount,
+                    () => OpenFolderAsync(sub.Path, floor)));
+            }
+
+            _tracks = folder.Tracks;
+            if (_tracks.Count > 0)
+            {
+                AddTrackRows(_tracks, _tracks);
+            }
+            else if (folder.Folders.Count == 0)
+            {
+                AddEmptyState("空文件夹", "这里没有子目录或歌曲", Symbol.Folder);
+            }
+
+            StatusText.Text = $"{folder.Name} · {_tracks.Count} 首";
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "打开文件夹失败");
+        }
+    }
+
+    static string ParentPath(string path)
+    {
+        var trimmed = path.TrimEnd('/');
+        var index = trimmed.LastIndexOf('/');
+        return index > 0 ? trimmed[..index] : "/";
+    }
+
+    /// <summary>目录行：图标 + 名称 + 路径/条目数 + 右侧箭头。</summary>
+    Control BuildFolderRow(string name, string path, int itemCount, Func<Task> onClick)
+    {
+        var icon = MakeIcon(Symbol.Folder, 17, IconIdle);
+
+        var title = new TextBlock
+        {
+            Text = name,
+            FontSize = 13.5,
+            Foreground = TextPrimary,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        var sub = new TextBlock
+        {
+            Text = itemCount > 0 ? $"{path} · {itemCount} 项" : path,
+            FontSize = 10.5,
+            Foreground = TextSecondary,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        var texts = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
+        texts.Children.Add(title);
+        texts.Children.Add(sub);
+
+        var chevron = MakeIcon(Symbol.ChevronRight, 12, IconIdle);
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("30,*,Auto"), VerticalAlignment = VerticalAlignment.Center };
+        grid.Children.Add(icon);
+        Grid.SetColumn(texts, 1);
+        grid.Children.Add(texts);
+        Grid.SetColumn(chevron, 2);
+        grid.Children.Add(chevron);
+
+        var row = new Border
+        {
+            Padding = new Thickness(8, 7),
+            CornerRadius = new CornerRadius(10),
+            Background = Brushes.Transparent,
+            Child = grid,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+
+        row.PointerEntered += (_, _) => row.Background = RowHover;
+        row.PointerExited += (_, _) => row.Background = Brushes.Transparent;
+        row.PointerPressed += async (_, _) => await onClick();
+        return row;
     }
 
     async Task OpenPlaylistAsync(Playlist playlist)
@@ -2726,14 +3822,26 @@ public partial class MainWindow : Window
         Func<Task> back = LoadHomeAsync;
         if (_mode == Mode.Search && _lastSearch.Length > 0) back = () => SearchAsync(_lastSearch);
 
+        SetActiveNav(null);
         try
         {
-            using var doc = await Api().GetPlaylistTracksAsync(playlist.Guid);
-            _tracks = Library.ParseTracks(doc);
-            _mode = Mode.Tracks;
-            BeginListPage(playlist.Name, $"歌单 · {_tracks.Count} 首", BuildDetailActions(back, _tracks));
-            AddTrackRows(_tracks, _tracks);
-            if (_tracks.Count == 0) AddEmptyState("歌单是空的", "在歌曲右侧点击「+」即可加入歌单", Symbol.TextBulletList);
+            StartPagedTracks(p => Api().GetPlaylistTracksAsync(playlist.Guid, p, 200),
+                playlist.Name, "歌单 · ", Mode.Tracks);
+            _currentPlaylist = playlist;
+
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            actions.Children.Add(MakePill("返回", Symbol.ArrowLeft, back));
+            actions.Children.Add(MakePill("添加歌曲", Symbol.Add, AddSongsToCurrentPlaylistAsync));
+            actions.Children.Add(CreatePlayAllAction(_tracks));
+            _pagedAction = actions;
+
+            await LoadPagedPageAsync();
+            if (_tracks.Count == 0) AddEmptyState("歌单是空的", "点「添加歌曲」从曲库挑选，或在歌曲右侧点「+」加入歌单", Symbol.TextBulletList);
             if (!string.IsNullOrWhiteSpace(playlist.CoverId)) _ = SetBackdropAsync(playlist.CoverId);
         }
         catch (Exception ex)
@@ -2742,6 +3850,32 @@ public partial class MainWindow : Window
         }
     }
 
+    async Task AddSongsToCurrentPlaylistAsync()
+    {
+        var playlist = _currentPlaylist;
+        if (playlist is null) return;
+        await ShowPickerDrawerAsync(playlist);
+    }
+
+    /// <summary>从当前正在浏览的歌单里移除一首歌。</summary>
+    async Task RemoveFromCurrentPlaylistAsync(Track track)
+    {
+        var playlist = _currentPlaylist;
+        if (playlist is null) return;
+
+        try
+        {
+            await Api().RemoveTrackFromPlaylistAsync(playlist.Guid, track.Guid);
+            StatusText.Text = $"已从歌单移除「{track.Title}」";
+            await OpenPlaylistAsync(playlist);
+        }
+        catch (Exception ex)
+        {
+            HandleError(ex, "移出歌单失败");
+        }
+    }
+
+    /// <summary>搜索结果：歌曲 / 专辑 / 歌手 / 歌单 四个 Tab，各自滚动到底部自动加载下一页。</summary>
     async Task SearchAsync(string keyword)
     {
         keyword = keyword.Trim();
@@ -2752,96 +3886,167 @@ public partial class MainWindow : Window
         SetActiveNav(null);
         BeginPage($"搜索 “{keyword}”", "歌曲 · 专辑 · 歌手 · 歌单");
 
-        var found = false;
-        var pendingImages = new List<(string?, Image)>();
-
-        try
+        var tabRow = new StackPanel
         {
-            using var doc = await Api().SearchTracksAsync(keyword);
-            var tracks = Library.ParseTracks(doc);
-            if (tracks.Count > 50) tracks = tracks.Take(50).ToList();
-            if (tracks.Count > 0)
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Margin = new Thickness(0, 10, 0, 2)
+        };
+        ContentPanel.Children.Add(tabRow);
+
+        var host = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+        var listScroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Content = host
+        };
+        ContentPanel.Children.Add(listScroll);
+        _searchListScroll = listScroll;
+        Dispatcher.UIThread.Post(UpdateSearchListHeight, DispatcherPriority.Background);
+
+        // 页面本身不再滚动：列表区内部滚动，滚到底自动加载下一页
+        listScroll.ScrollChanged += (_, _) =>
+        {
+            if (listScroll.Extent.Height <= 0) return;
+            if (listScroll.Offset.Y + listScroll.Viewport.Height >= listScroll.Extent.Height - 200)
             {
-                found = true;
-                AddSection("歌曲", tracks.Count);
-                AddTrackRows(tracks, tracks);
+                _ = LoadGridPageAsync();
             }
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "搜索歌曲失败");
-        }
+        };
 
-        try
+        var tabs = new (string Label, Func<int, Task<JsonDocument>> Fetch, string Unit)[]
         {
-            using var doc = await Api().SearchAlbumsAsync(keyword);
-            var albums = Library.ParseAlbums(doc);
-            if (albums.Count > 0)
+            ("歌曲", p => Api().SearchTracksAsync(keyword, p, 100), "首"),
+            ("专辑", p => Api().SearchAlbumsAsync(keyword, p, 40), "张专辑"),
+            ("歌手", p => Api().SearchArtistsAsync(keyword, p, 40), "位歌手"),
+            ("歌单", p => Api().SearchPlaylistsAsync(keyword, p, 40), "个歌单")
+        };
+
+        var buttons = new Button[tabs.Length];
+
+        async Task ActivateAsync(int index)
+        {
+            for (var i = 0; i < buttons.Length; i++)
             {
-                found = true;
-                AddSection("专辑", albums.Count);
-                var panel = new WrapPanel { Margin = new Thickness(-4, 4, 0, 0) };
-                foreach (var album in albums)
+                if (i == index) buttons[i].Classes.Add("active");
+                else buttons[i].Classes.Remove("active");
+            }
+
+            _gridActive = false;
+            host.Children.Clear();
+
+            Panel panel;
+            if (index is 1 or 3)
+            {
+                var wrap = new WrapPanel { Margin = new Thickness(-4, 4, 0, 0) };
+                host.Children.Add(wrap);
+                panel = wrap;
+            }
+            else
+            {
+                var stack = new StackPanel { Spacing = 2, Margin = new Thickness(0, 2, 0, 0) };
+                host.Children.Add(stack);
+                panel = stack;
+            }
+            _gridPanel = panel;
+
+            switch (index)
+            {
+                case 0:
                 {
-                    panel.Children.Add(BuildCard(album.Name, album.Artist, album.CoverId,
-                        () => OpenAlbumAsync(album), pendingImages));
+                    // 歌曲：行列表，队列随分页增长，后续页的行仍按整队列连播
+                    var queue = new List<Track>();
+                    StartGridPaging(tabs[index].Fetch, (doc, pending) =>
+                    {
+                        var batch = Library.ParseTracks(doc);
+                        var controls = new List<Control>();
+                        foreach (var track in batch)
+                        {
+                            queue.Add(track);
+                            controls.Add(BuildTrackRow(track, queue, queue.Count - 1));
+                        }
+                        if (batch.Count > 0)
+                        {
+                            _ = LoadTrackCoversAsync(batch);
+                            Dispatcher.UIThread.Post(UpdateRowHighlight);
+                        }
+                        return controls;
+                    }, tabs[index].Unit);
+                    break;
                 }
-                ContentPanel.Children.Add(panel);
+                case 1:
+                    StartGridPaging(tabs[index].Fetch, (doc, pending) =>
+                    {
+                        var controls = new List<Control>();
+                        foreach (var album in Library.ParseAlbums(doc))
+                        {
+                            controls.Add(BuildCard(album.Name, album.Artist, album.CoverId,
+                                () => OpenAlbumAsync(album), pending));
+                        }
+                        return controls;
+                    }, tabs[index].Unit);
+                    break;
+                case 2:
+                    StartGridPaging(tabs[index].Fetch, (doc, pending) =>
+                    {
+                        var controls = new List<Control>();
+                        foreach (var artist in Library.ParseArtists(doc))
+                        {
+                            controls.Add(BuildArtistRow(artist, pending));
+                        }
+                        return controls;
+                    }, tabs[index].Unit);
+                    break;
+                default:
+                    StartGridPaging(tabs[index].Fetch, (doc, pending) =>
+                    {
+                        var controls = new List<Control>();
+                        foreach (var playlist in Library.ParsePlaylists(doc))
+                        {
+                            controls.Add(BuildCard(playlist.Name, $"{playlist.TrackCount} 首", playlist.CoverId,
+                                () => OpenPlaylistAsync(playlist), pending));
+                        }
+                        return controls;
+                    }, tabs[index].Unit);
+                    break;
             }
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "搜索专辑失败");
-        }
 
-        try
-        {
-            using var doc = await Api().SearchArtistsAsync(keyword);
-            var artists = Library.ParseArtists(doc);
-            if (artists.Count > 0)
+            listScroll.Offset = new Vector(0, 0);
+            UpdateSearchListHeight();
+            await LoadGridPageAsync();
+
+            if (_gridLoaded == 0)
             {
-                found = true;
-                AddSection("歌手", artists.Count);
-                var panel = new StackPanel { Spacing = 2, Margin = new Thickness(0, 2, 0, 0) };
-                foreach (var artist in artists)
+                host.Children.Add(new TextBlock
                 {
-                    panel.Children.Add(BuildArtistRow(artist, pendingImages));
-                }
-                ContentPanel.Children.Add(panel);
+                    Text = $"没有找到{tabs[index].Label}",
+                    FontSize = 13,
+                    Foreground = TextSecondary,
+                    Margin = new Thickness(2, 24, 0, 0)
+                });
             }
         }
-        catch (Exception ex)
-        {
-            HandleError(ex, "搜索歌手失败");
-        }
 
-        try
+        for (var i = 0; i < tabs.Length; i++)
         {
-            using var doc = await Api().SearchPlaylistsAsync(keyword);
-            var playlists = Library.ParsePlaylists(doc);
-            if (playlists.Count > 0)
+            var index = i;
+            var button = new Button
             {
-                found = true;
-                AddSection("歌单", playlists.Count);
-                var panel = new WrapPanel { Margin = new Thickness(-4, 4, 0, 0) };
-                foreach (var playlist in playlists)
+                Content = new TextBlock
                 {
-                    panel.Children.Add(BuildCard(playlist.Name, $"{playlist.TrackCount} 首", playlist.CoverId,
-                        () => OpenPlaylistAsync(playlist), pendingImages));
+                    Text = tabs[i].Label,
+                    VerticalAlignment = VerticalAlignment.Center
                 }
-                ContentPanel.Children.Add(panel);
-            }
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "搜索歌单失败");
+            };
+            button.Classes.Add("searchtab");
+            button.Click += async (_, _) => await ActivateAsync(index);
+            buttons[i] = button;
+            tabRow.Children.Add(button);
         }
 
-        _ = LoadCardCoversAsync(pendingImages);
-
-        if (!found) AddEmptyState("没有找到相关内容", "换个关键词试试", Symbol.Search);
+        await ActivateAsync(0);
         StatusText.Text = $"搜索：{keyword}";
-        ScrollToTop();
     }
 
     Control BuildArtistRow(Artist artist, List<(string?, Image)> pending)
@@ -3008,6 +4213,8 @@ public partial class MainWindow : Window
             }
 
             _ = LoadNowCoverAsync(track.CoverId);
+            // 切歌即加载歌词，桌面歌词据此决定是否显示
+            _ = LoadLyricsAsync(track.Guid);
         }
 
         _ = Api().ReportTrackPlayAsync(track.Guid).ContinueWith(_ => { });
@@ -3123,6 +4330,29 @@ public partial class MainWindow : Window
         {
             _timer?.Stop();
         }
+
+        SyncSpectrum(active && !IsBackgrounded);
+    }
+
+    /// <summary>桌面歌词按钮的开启状态配色。</summary>
+    void UpdateDesktopLyricsButton()
+    {
+        DesktopLyricsIcon.Foreground = _config.DesktopLyrics ? AccentSoft : IconIdle;
+    }
+
+    /// <summary>频谱只在全屏页可见且正在播放时采集，避免后台无谓占用。</summary>
+    void SyncSpectrum(bool playing)
+    {
+        var shouldRun = playing && _config.SpectrumEnabled && NowPlayingOverlay.IsVisible;
+        if (shouldRun)
+        {
+            _spectrum.Start();
+        }
+        else
+        {
+            _spectrum.Stop();
+        }
+        OverlaySpectrum.SetActive(shouldRun);
     }
 
     void UpdatePlaybackUi()
@@ -3207,6 +4437,13 @@ public partial class MainWindow : Window
 
     void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && PickerPanel.IsVisible)
+        {
+            HidePickerDrawer();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape && QueuePanel.IsVisible)
         {
             HideQueueDrawer();
@@ -3251,14 +4488,20 @@ public partial class MainWindow : Window
 
         HideQueueDrawer();
         NowPlayingOverlay.IsVisible = true;
+        SyncSpectrum(_player?.IsPlaying == true && !_paused);
         OverlayTitle.Text = _currentTrack.Title;
         OverlaySub.Text = NowSub.Text;
         SetPlayIcon(_player?.IsPlaying == true);
 
         _ = RefreshOverlayAsync(_currentTrack);
+        if (_lyricsGuid != _currentTrack.Guid) _ = LoadLyricsAsync(_currentTrack.Guid);
     }
 
-    void HideOverlay() => NowPlayingOverlay.IsVisible = false;
+    void HideOverlay()
+    {
+        NowPlayingOverlay.IsVisible = false;
+        SyncSpectrum(playing: false);
+    }
 
     async Task RefreshOverlayAsync(Track track)
     {
@@ -3268,17 +4511,18 @@ public partial class MainWindow : Window
             OverlayCover.Source = cover;
             OverlayBackdrop.Source = cover;
         }
-
-        await LoadLyricsAsync(track.Guid);
     }
 
     async Task LoadLyricsAsync(string trackGuid)
     {
+        _lyricsGuid = trackGuid;
         _lyrics = new List<LyricLine>();
         _lyricIndex = -1;
         _lyricBlocks.Clear();
         LyricsPanel.Children.Clear();
         LyricsScroll.Offset = new Vector(0, 0);
+        // 切歌瞬间先收起旧歌词浮窗，等新歌词加载成功再出现
+        ApplyDesktopLyrics();
 
         try
         {
@@ -3297,6 +4541,7 @@ public partial class MainWindow : Window
                 FontSize = 16,
                 Foreground = TextSecondary
             });
+            ApplyDesktopLyrics();
             return;
         }
 
@@ -3315,11 +4560,13 @@ public partial class MainWindow : Window
         }
 
         UpdateOverlayLyrics(force: true);
+        // 歌词已就绪：若桌面歌词开关开着，此时才让浮窗出现
+        ApplyDesktopLyrics();
     }
 
     void UpdateOverlayLyrics(bool force = false)
     {
-        if (!NowPlayingOverlay.IsVisible || _lyrics.Count == 0 || _player is null) return;
+        if (_lyrics.Count == 0 || _player is null) return;
 
         var position = TimeSpan.FromMilliseconds(Math.Max(0, _player.Position));
         var index = -1;
@@ -3333,6 +4580,10 @@ public partial class MainWindow : Window
         if (!force && index == _lyricIndex) return;
 
         _lyricIndex = index;
+        UpdateDesktopLyricLines(index);
+
+        if (!NowPlayingOverlay.IsVisible) return;
+
         var active = LyricActive;
         var idle = LyricIdle;
 
@@ -3348,6 +4599,58 @@ public partial class MainWindow : Window
         {
             LyricsScroll.Offset = new Vector(0, Math.Max(0, index * 46 - 150));
         }
+    }
+
+    void UpdateDesktopLyricLines(int index)
+    {
+        if (_desktopLyrics is null) return;
+        var current = index >= 0 && index < _lyrics.Count ? _lyrics[index].Text : string.Empty;
+        var next = index + 1 < _lyrics.Count ? _lyrics[index + 1].Text : string.Empty;
+        _desktopLyrics.SetLines(current, next);
+    }
+
+    /// <summary>按配置显示/隐藏桌面歌词浮窗；没有歌词时不显示。</summary>
+    void ApplyDesktopLyrics()
+    {
+        if (!_config.DesktopLyrics || _lyrics.Count == 0)
+        {
+            CloseDesktopLyricsSilently();
+            return;
+        }
+
+        if (_desktopLyrics is null)
+        {
+            var window = new DesktopLyricsWindow();
+            window.Closed += (_, _) =>
+            {
+                _desktopLyrics = null;
+                if (_desktopLyricsAutoClose)
+                {
+                    _desktopLyricsAutoClose = false;
+                    return;
+                }
+                _config.DesktopLyrics = false;
+                _config.Save();
+                UpdateDesktopLyricsButton();
+            };
+            _desktopLyrics = window;
+            window.ShowBottomCenter();
+        }
+        else if (!_desktopLyrics.IsVisible)
+        {
+            _desktopLyrics.ShowBottomCenter();
+        }
+
+        UpdateDesktopLyricLines(_lyricIndex);
+    }
+
+    /// <summary>因切歌/无歌词自动关闭浮窗，不改变用户的开关偏好。</summary>
+    void CloseDesktopLyricsSilently()
+    {
+        if (_desktopLyrics is null) return;
+        _desktopLyricsAutoClose = true;
+        _desktopLyrics.Close();
+        _desktopLyrics = null;
     }
 
     void SetPlayIcon(bool playing)

@@ -12,6 +12,9 @@ public sealed class AppConfig
     public string? LastUsername { get; set; }
     public int Volume { get; set; } = 70;
     public string BackgroundMode { get; set; } = "cover";
+
+    /// <summary>自定义背景色（BackgroundMode = custom 时生效）。</summary>
+    public string BackgroundCustomColor { get; set; } = "#2B1B33";
     public string Material { get; set; } = "off";
     public double UiOpacity { get; set; } = 0.75;
     public string Theme { get; set; } = "dark";
@@ -19,6 +22,11 @@ public sealed class AppConfig
     public bool BackgroundPlayback { get; set; } = true;
     public bool StartShuffle { get; set; }
     public int StartRepeat { get; set; }
+
+    /// <summary>均衡器预设索引，-1 表示关闭。</summary>
+    public int EqPresetIndex { get; set; } = -1;
+    public bool DesktopLyrics { get; set; }
+    public bool SpectrumEnabled { get; set; } = true;
 
     static string ConfigDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FnMusic");

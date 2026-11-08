@@ -30,6 +30,7 @@
     </PackageReference>
     <PackageReference Include="FluentIcons.Avalonia" Version="2.1.344" />
     <PackageReference Include="LibVLCSharp" Version="3.10.2" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
   </ItemGroup>
 

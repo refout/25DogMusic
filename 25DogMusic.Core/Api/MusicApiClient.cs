@@ -239,6 +239,38 @@ public sealed class MusicApiClient : IDisposable
             ["size"] = size.ToString()
         }, ct);
 
+    public async Task<JsonDocument> GetPlaylistDetailAsync(string playlistGuid, CancellationToken ct = default)
+        => await GetAsync("/playlist/detail", new Dictionary<string, string?>
+        {
+            ["guid"] = playlistGuid
+        }, ct);
+
+    public Task<JsonDocument> EditPlaylistAsync(string playlistGuid, string name, CancellationToken ct = default)
+        => PostAsync("/playlist/edit", new JsonObject
+        {
+            ["guid"] = playlistGuid,
+            ["name"] = name
+        }, ct);
+
+    public Task<JsonDocument> DeletePlaylistAsync(string playlistGuid, CancellationToken ct = default)
+        => PostAsync("/playlist/delete", new JsonObject { ["guid"] = playlistGuid }, ct);
+
+    /// <summary>共享库（音乐根目录）列表。</summary>
+    public async Task<JsonDocument> GetSharedLibrariesAsync(int page = 1, int pageSize = 200, CancellationToken ct = default)
+        => await GetAsync("/shared-library/list", new Dictionary<string, string?>
+        {
+            ["page"] = page.ToString(),
+            ["size"] = pageSize.ToString()
+        }, ct);
+
+    /// <summary>文件夹视图：返回 parentPath 下的子目录与歌曲。</summary>
+    public async Task<JsonDocument> GetFolderViewAsync(string parentPath, string sort = "title,asc", CancellationToken ct = default)
+        => await GetAsync("/folder-view/list", new Dictionary<string, string?>
+        {
+            ["parentPath"] = parentPath,
+            ["sort"] = sort
+        }, ct);
+
     public Task<JsonDocument> CreatePlaylistAsync(string name, CancellationToken ct = default)
         => PostAsync("/playlist/create", new JsonObject { ["name"] = name }, ct);
 
@@ -365,12 +397,12 @@ public sealed class MusicApiClient : IDisposable
             ["relativeRoamId"] = roamId
         }, ct);
 
-    public async Task<JsonDocument> SearchTracksAsync(string keyword, CancellationToken ct = default)
+    public async Task<JsonDocument> SearchTracksAsync(string keyword, int page = 1, int pageSize = 50, CancellationToken ct = default)
         => await GetAsync("/search/track", new Dictionary<string, string?>
         {
             ["q"] = keyword,
-            ["page"] = "1",
-            ["pageSize"] = "50"
+            ["page"] = page.ToString(),
+            ["pageSize"] = pageSize.ToString()
         }, ct);
 
     /// <summary>构造带鉴权的音频流请求（供本地代理转发）。</summary>

@@ -10,6 +10,15 @@ public sealed record Genre(string Guid, string Name, int TrackCount);
 
 public sealed record Playlist(string Guid, string Name, int TrackCount, string CoverId);
 
+/// <summary>共享库（音乐根目录）。</summary>
+public sealed record SharedLibrary(string Guid, string Name, string Path);
+
+/// <summary>文件夹视图里的子文件夹。</summary>
+public sealed record FolderEntry(string Name, string Path, int ItemCount);
+
+/// <summary>文件夹视图内容：当前文件夹的子目录与歌曲。</summary>
+public sealed record FolderContent(string Name, string Path, int ItemCount, List<FolderEntry> Folders, List<Track> Tracks);
+
 public sealed record Track(
     string Guid,
     string Title,
@@ -102,6 +111,68 @@ public static class Library
         }
 
         return result;
+    }
+
+    public static List<SharedLibrary> ParseSharedLibraries(JsonDocument doc)
+    {
+        var result = new List<SharedLibrary>();
+        if (!TryGetList(doc, out var list)) return result;
+
+        foreach (var item in list.EnumerateArray())
+        {
+            var path = GetString(item, "path");
+            if (string.IsNullOrEmpty(path)) continue;
+            var name = GetString(item, "name");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                // 共享库名称为空时用目录名代替，避免标题直接显示整段路径
+                var trimmed = path.TrimEnd('/');
+                var index = trimmed.LastIndexOf('/');
+                name = index >= 0 ? trimmed[(index + 1)..] : trimmed;
+            }
+            result.Add(new SharedLibrary(GetString(item, "guid"), name, path));
+        }
+
+        return result;
+    }
+
+    /// <summary>解析 folder-view/list 的 data.folder。</summary>
+    public static FolderContent? ParseFolderView(JsonDocument doc)
+    {
+        if (!doc.RootElement.TryGetProperty("data", out var data) ||
+            !data.TryGetProperty("folder", out var folder) ||
+            folder.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var folders = new List<FolderEntry>();
+        if (folder.TryGetProperty("folders", out var folderArray) && folderArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in folderArray.EnumerateArray())
+            {
+                var path = GetString(item, "path");
+                if (string.IsNullOrEmpty(path)) continue;
+                folders.Add(new FolderEntry(GetString(item, "name"), path, GetInt(item, "itemCount")));
+            }
+        }
+
+        var tracks = new List<Track>();
+        if (folder.TryGetProperty("tracks", out var trackArray) && trackArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in trackArray.EnumerateArray())
+            {
+                var track = FromElement(item);
+                if (track is not null) tracks.Add(track);
+            }
+        }
+
+        return new FolderContent(
+            GetString(folder, "name"),
+            GetString(folder, "path"),
+            GetInt(folder, "itemCount"),
+            folders,
+            tracks);
     }
 
     public static List<Track> ParseTracks(JsonDocument doc)
