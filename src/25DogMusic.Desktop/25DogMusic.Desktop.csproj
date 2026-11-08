@@ -1,11 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType Condition="$([MSBuild]::IsOSPlatform('Windows'))">WinExe</OutputType>
+    <OutputType Condition="!$([MSBuild]::IsOSPlatform('Windows'))">Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\appicon.ico</ApplicationIcon>
+    <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
+    <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">Assets\appicon.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
@@ -31,7 +32,8 @@
     <PackageReference Include="FluentIcons.Avalonia" Version="2.1.344" />
     <PackageReference Include="LibVLCSharp" Version="3.10.2" />
     <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
+    <!-- Windows 自带 VLC 原生库；Linux 依赖系统安装的 libvlc，macOS 后续可改用 VideoLAN.LibVLC.Mac -->
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
   </ItemGroup>
 
   <ItemGroup>

@@ -31,13 +31,56 @@ jobs:
           -r win-x64
           --self-contained true
           -p:PublishAot=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -p:CopyOutputSymbolsToPublishDirectory=false
           -o publish/25DogMusic-win-x64
+
+      - name: Trim package
+        shell: pwsh
+        run: |
+          $out = "publish/25DogMusic-win-x64"
+
+          # 只保留目标架构的 VLC 运行时，去掉 win-x86 / win-arm64
+          foreach ($arch in "win-x86", "win-arm64") {
+            $path = Join-Path $out "libvlc/$arch"
+            if (Test-Path $path) { Remove-Item $path -Recurse -Force }
+          }
+
+          # 去掉调试符号与导入库
+          Get-ChildItem $out -Recurse -Include *.pdb, *.lib -File -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+
+          # 只保留音频播放用到的 VLC 插件
+          $keep = @(
+            "access", "audio_filter", "audio_mixer", "audio_output", "codec", "demux",
+            "keystore", "logger", "misc", "packetizer", "stream_filter"
+          )
+          $plugins = Join-Path $out "libvlc/win-x64/plugins"
+          if (Test-Path $plugins) {
+            Get-ChildItem $plugins -Directory |
+              Where-Object { $keep -notcontains $_.Name } |
+              ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
+          }
+
+          # 播放不需要的附加资源
+          foreach ($extra in "hrtfs", "lua") {
+            $path = Join-Path $out "libvlc/win-x64/$extra"
+            if (Test-Path $path) { Remove-Item $path -Recurse -Force }
+          }
+
+          $size = (Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum
+          "裁剪后：{0} 个文件，{1:N1} MB" -f (Get-ChildItem $out -Recurse -File).Count, ($size / 1MB)
 
       - name: Verify output
         shell: pwsh
         run: |
-          $exe = "publish/25DogMusic-win-x64/25DogMusic.Desktop.exe"
+          $out = "publish/25DogMusic-win-x64"
+          $exe = "$out/25DogMusic.Desktop.exe"
           if (-not (Test-Path $exe)) { throw "未找到发布产物: $exe" }
+          if (Test-Path "$out/libvlc/win-x86") { throw "win-x86 运行时未清理" }
+          if (Test-Path "$out/libvlc/win-arm64") { throw "win-arm64 运行时未清理" }
+          if (Get-ChildItem $out -Recurse -Filter *.pdb) { throw "调试符号未清理" }
           Get-Item $exe | Select-Object FullName, Length
 
       - name: Package

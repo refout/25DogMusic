@@ -30,6 +30,8 @@ public sealed class SpectrumAnalyzer : IDisposable
 
     public void Start()
     {
+        // WASAPI 系统回环采集仅 Windows 支持，其它平台保持空闲频谱
+        if (!OperatingSystem.IsWindows()) return;
         if (_capture is not null) return;
 
         try

@@ -345,6 +345,15 @@ public sealed class MusicApiClient : IDisposable
             ["size"] = size.ToString()
         }, ct);
 
+    /// <summary>某位歌手的专辑列表。</summary>
+    public async Task<JsonDocument> GetAlbumsByArtistAsync(string artistGuid, int page = 1, int size = 100, CancellationToken ct = default)
+        => await GetAsync("/album/artist-detail/list", new Dictionary<string, string?>
+        {
+            ["artistGUID"] = artistGuid,
+            ["page"] = page.ToString(),
+            ["size"] = size.ToString()
+        }, ct);
+
     public async Task<JsonDocument> GetTracksAsync(int page = 1, int pageSize = 200, string? sort = null, CancellationToken ct = default)
         => await GetAsync("/track/list", new Dictionary<string, string?>
         {
