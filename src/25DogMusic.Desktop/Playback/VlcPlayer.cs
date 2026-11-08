@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using LibVLCSharp.Shared;
 
 namespace FnMusic.Playback;
@@ -11,10 +12,42 @@ public sealed class VlcPlayer : IDisposable
 
     public VlcPlayer()
     {
-        Core.Initialize();
+        // Linux / macOS 使用随包附带的 libvlc；Windows 由 VideoLAN.LibVLC.Windows 默认初始化
+        if (FindBundledVlc() is { } bundled)
+        {
+            Environment.SetEnvironmentVariable("VLC_PLUGIN_PATH", bundled.Plugins);
+            Core.Initialize(bundled.Library);
+        }
+        else
+        {
+            Core.Initialize();
+        }
         _lib = new LibVLC("--no-video", "--network-caching=3000", "--quiet");
         _player = new MediaPlayer(_lib);
         _player.EndReached += (_, _) => EndReached?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>查找随包附带的 libvlc 目录（Linux / macOS 打包时附带）。</summary>
+    static (string Library, string Plugins)? FindBundledVlc()
+    {
+        var baseDir = AppContext.BaseDirectory;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            var rid = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "osx-arm64" : "osx-x64";
+            var lib = Path.Combine(baseDir, "libvlc", rid, "lib");
+            if (Directory.Exists(lib)) return (lib, Path.Combine(lib, "vlc", "plugins"));
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            foreach (var rid in new[] { "linux-arm64", "linux-x64" })
+            {
+                var dir = Path.Combine(baseDir, "libvlc", rid);
+                if (Directory.Exists(dir)) return (dir, Path.Combine(dir, "plugins"));
+            }
+        }
+
+        return null;
     }
 
     public bool IsPlaying => _player.IsPlaying;

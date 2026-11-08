@@ -14,7 +14,21 @@ permissions:
 
 jobs:
   package:
-    runs-on: windows-latest
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            rid: win-x64
+          - name: linux-x64
+            os: ubuntu-latest
+            rid: linux-x64
+          - name: macos-arm64
+            os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,24 +38,33 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Publish (AOT, win-x64)
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev libvlc-dev vlc-plugin-base
+
+      - name: Publish (AOT, ${{ matrix.rid }})
+        shell: pwsh
         run: >
           dotnet publish src/25DogMusic.Desktop/25DogMusic.Desktop.csproj
           -c Release
-          -r win-x64
+          -r ${{ matrix.rid }}
           --self-contained true
           -p:PublishAot=true
           -p:DebugType=None
           -p:DebugSymbols=false
           -p:CopyOutputSymbolsToPublishDirectory=false
-          -o publish/25DogMusic-win-x64
+          -o publish/${{ matrix.name }}
 
-      - name: Trim package
+      # ---------- Windows：裁剪 + 安装包 ----------
+      - name: Trim package (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $out = "publish/25DogMusic-win-x64"
+          $out = "publish/windows-x64"
 
-          # 只保留目标架构的 VLC 运行时，去掉 win-x86 / win-arm64
+          # 只保留目标架构的 VLC 运行时
           foreach ($arch in "win-x86", "win-arm64") {
             $path = Join-Path $out "libvlc/$arch"
             if (Test-Path $path) { Remove-Item $path -Recurse -Force }
@@ -72,38 +95,152 @@ jobs:
           $size = (Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum
           "裁剪后：{0} 个文件，{1:N1} MB" -f (Get-ChildItem $out -Recurse -File).Count, ($size / 1MB)
 
-      - name: Verify output
-        shell: pwsh
-        run: |
-          $out = "publish/25DogMusic-win-x64"
-          $exe = "$out/25DogMusic.Desktop.exe"
-          if (-not (Test-Path $exe)) { throw "未找到发布产物: $exe" }
-          if (Test-Path "$out/libvlc/win-x86") { throw "win-x86 运行时未清理" }
-          if (Test-Path "$out/libvlc/win-arm64") { throw "win-arm64 运行时未清理" }
-          if (Get-ChildItem $out -Recurse -Filter *.pdb) { throw "调试符号未清理" }
-          Get-Item $exe | Select-Object FullName, Length
-
-      - name: Package
+      - name: Package zip (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$env:GITHUB_RUN_NUMBER" }
-          $zip = "25DogMusic-$ver-win-x64.zip"
-          Compress-Archive -Path "publish/25DogMusic-win-x64/*" -DestinationPath $zip -Force
-          "PKG_ZIP=$zip" >> $env:GITHUB_ENV
-          "PKG_VERSION=$ver" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Compress-Archive -Path "publish/windows-x64/*" -DestinationPath "dist/25DogMusic-$ver-win-x64.zip" -Force
+
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = (Get-ChildItem "C:\Program Files*\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 1).FullName
+          }
+          if (-not $iscc) { throw "未找到 Inno Setup 的 ISCC.exe" }
+
+          $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$env:GITHUB_RUN_NUMBER" }
+          & $iscc "/DAPP_VERSION=$ver" "installer/25DogMusic.iss"
+          Get-ChildItem dist
+
+      # ---------- Linux：附带 VLC 与启动脚本 ----------
+      - name: Bundle VLC and launcher (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="publish/linux-x64"
+          LIB="$OUT/libvlc/linux-x64"
+          mkdir -p "$LIB/plugins" "$LIB/sysdeps"
+
+          # libvlc 核心库与插件
+          cp -L /usr/lib/x86_64-linux-gnu/libvlc.so.* "$LIB"/
+          cp -L /usr/lib/x86_64-linux-gnu/libvlccore.so.* "$LIB"/
+          core=$(basename "$(ls "$LIB"/libvlc.so.* | head -n 1)")
+          cc=$(basename "$(ls "$LIB"/libvlccore.so.* | head -n 1)")
+          ln -sf "$core" "$LIB/libvlc.so"
+          ln -sf "$cc" "$LIB/libvlccore.so"
+          cp -a /usr/lib/x86_64-linux-gnu/vlc/plugins/. "$LIB/plugins"/
+
+          # 只保留音频播放用到的插件
+          KEEP="access audio_filter audio_mixer audio_output codec demux keystore logger misc packetizer stream_filter"
+          for dir in "$LIB/plugins"/*; do
+            name=$(basename "$dir")
+            case " $KEEP " in *" $name "*) ;; *) rm -rf "$dir" ;; esac
+          done
+
+          # 插件依赖的第三方共享库
+          for f in "$LIB"/plugins/*/*.so; do
+            ldd "$f" 2>/dev/null | awk '{print $3}' | grep '^/' || true
+          done | sort -u \
+            | grep -vE 'libc\.so|libm\.so|libdl\.so|libpthread|librt\.so|libgcc_s|libstdc\+\+|ld-linux|libX11|libwayland' \
+            | while read -r dep; do cp -L "$dep" "$LIB/sysdeps/" 2>/dev/null || true; done
+
+          cat > "$OUT/25DogMusic.sh" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          export LD_LIBRARY_PATH="$DIR/libvlc/linux-x64:$DIR/libvlc/linux-x64/sysdeps${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export VLC_PLUGIN_PATH="$DIR/libvlc/linux-x64/plugins"
+          exec "$DIR/25DogMusic.Desktop" "$@"
+          SH
+          chmod +x "$OUT/25DogMusic.sh"
+
+          # 去掉调试符号
+          find "$OUT" -name '*.pdb' -delete
+
+          VER="${GITHUB_REF_NAME}"
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then VER="dev-${GITHUB_RUN_NUMBER}"; fi
+          mkdir -p dist
+          tar -czf "dist/25DogMusic-$VER-linux-x64.tar.gz" -C publish linux-x64
+          du -sh "$OUT" dist/*
+
+      # ---------- macOS：附带 VLC + .app 包 ----------
+      - name: Bundle app (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="publish/macos-arm64"
+          PLUGINS="$OUT/libvlc/osx-arm64/lib/vlc/plugins"
+
+          # 只保留音频播放用到的插件
+          KEEP="access audio_filter audio_mixer audio_output codec demux keystore logger misc packetizer stream_filter"
+          if [ -d "$PLUGINS" ]; then
+            for dir in "$PLUGINS"/*; do
+              name=$(basename "$dir")
+              case " $KEEP " in *" $name "*) ;; *) rm -rf "$dir" ;; esac
+            done
+          fi
+          find "$OUT" -name '*.dSYM' -prune -exec rm -rf {} +
+
+          # 组装 .app
+          APP="dist/25DogMusic.app"
+          mkdir -p "$APP/Contents/MacOS"
+          cp -R "$OUT"/. "$APP/Contents/MacOS/"
+          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>25DogMusic</string>
+            <key>CFBundleDisplayName</key><string>25DogMusic</string>
+            <key>CFBundleIdentifier</key><string>com.refout.25dogmusic</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleExecutable</key><string>25DogMusic.Desktop</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          chmod +x "$APP/Contents/MacOS/25DogMusic.Desktop"
+
+          VER="${GITHUB_REF_NAME}"
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then VER="dev-${GITHUB_RUN_NUMBER}"; fi
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/25DogMusic-$VER-macos-arm64.zip"
+          du -sh "$APP" dist/*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 25DogMusic-win-x64
-          path: ${{ env.PKG_ZIP }}
+          name: 25DogMusic-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: package
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Create GitHub Release
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: pwsh
         run: |
-          gh release create "$env:GITHUB_REF_NAME" "$env:PKG_ZIP" `
-            --title "25DogMusic $env:GITHUB_REF_NAME" `
+          ls -lh dist
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "25DogMusic $GITHUB_REF_NAME" \
             --generate-notes

@@ -40,7 +40,7 @@
 
 ## 本地开发
 
-环境要求：Windows、[.NET 10 SDK](https://dotnet.microsoft.com/download)。
+主要支持 Windows；Linux / macOS 亦可构建，需各自的原生工具链（Linux 需 `clang`、`zlib1g-dev` 与 `libvlc-dev`，macOS 需 Xcode）。环境要求：[.NET 10 SDK](https://dotnet.microsoft.com/download)。
 
 ```powershell
 # 还原与构建
@@ -50,12 +50,15 @@ dotnet build src/25DogMusic.slnx
 dotnet run --project src/25DogMusic.Desktop
 ```
 
-首次启动需在登录页填写飞牛 NAS 地址并登录，登录信息保存在 `%LOCALAPPDATA%\FnMusic\config.json`。
+首次启动需在登录页填写飞牛 NAS 地址并登录。登录信息保存在系统本地应用数据目录下的 `FnMusic/config.json`（Windows：`%LOCALAPPDATA%\FnMusic\config.json`，Linux：`~/.local/share/FnMusic/config.json`，macOS：`~/Library/Application Support/FnMusic/config.json`）。
 
 ## 构建与发布
 
 - **CI**：推送到 `main` 或提交 PR 时自动还原并构建 Release（`.github/workflows/ci.yml`）。
-- **打包**：推送 `v*` 标签触发 NativeAOT 发布，生成 `25DogMusic-<版本>-win-x64.zip` 并创建 GitHub Release（`.github/workflows/release.yml`）。
+- **打包**：推送 `v*` 标签触发 NativeAOT 发布并创建 GitHub Release（`.github/workflows/release.yml`）：
+  - Windows：`25DogMusic-<版本>-win-x64.zip` 与 `25DogMusic-<版本>-windows-x64-setup.exe` 安装包
+  - Linux：`25DogMusic-<版本>-linux-x64.tar.gz`（内置 libvlc 与启动脚本 `25DogMusic.sh`）
+  - macOS（Apple Silicon）：`25DogMusic-<版本>-macos-arm64.zip`（内置 libvlc 的 `.app`，未签名）
 
 ```powershell
 # 本地 AOT 打包（需安装 VS「使用 C++ 的桌面开发」组件）

@@ -3,6 +3,7 @@ bin/
 obj/
 artifacts/
 publish/
+dist/
 
 # IDE / 本地配置
 .vs/

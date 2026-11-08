@@ -5110,14 +5110,16 @@ public partial class MainWindow : Window
 
     // ---- 后台播放 / 托盘 ----
 
-    TrayIcon CreateTrayIcon()
+    TrayIcon? CreateTrayIcon()
     {
-        var tray = new TrayIcon
+        try
         {
-            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://25DogMusic.Desktop/Assets/appicon.ico"))),
-            ToolTipText = "25DogMusic",
-            IsVisible = true
-        };
+            var tray = new TrayIcon
+            {
+                Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://25DogMusic.Desktop/Assets/appicon.ico"))),
+                ToolTipText = "25DogMusic",
+                IsVisible = true
+            };
 
         var menu = new NativeMenu();
 
@@ -5148,6 +5150,12 @@ public partial class MainWindow : Window
 
         TrayIcon.SetIcons(Application.Current!, new TrayIcons { tray });
         return tray;
+        }
+        catch
+        {
+            // Linux 等缺少托盘支持的环境下静默跳过，窗口关闭即退出
+            return null;
+        }
     }
 
     void ShowFromTray()
@@ -5199,8 +5207,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
-        // 后台播放开启时，关闭窗口只是隐藏到托盘，播放不中断
-        if (!_reallyExit && _config.BackgroundPlayback && _currentTrack is not null)
+        // 后台播放开启且存在托盘时，关闭窗口只是隐藏到托盘，播放不中断
+        if (!_reallyExit && _tray is not null && _config.BackgroundPlayback && _currentTrack is not null)
         {
             e.Cancel = true;
             HideToTray();
