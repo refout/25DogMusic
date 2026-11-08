@@ -335,13 +335,17 @@
     </Style>
 
     <Style Selector="TabItem">
-      <Setter Property="FontSize" Value="15" />
-      <Setter Property="MinHeight" Value="44" />
-      <Setter Property="Padding" Value="20,10" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="MinHeight" Value="54" />
+      <Setter Property="Padding" Value="22,10,22,0" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="TabItem TextBlock">
-      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontSize" Value="16" />
+    </Style>
+    <!-- 让选中文案与底部指示线之间留出间距（默认模板把指示线贴在文字下方） -->
+    <Style Selector="TabItem /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Margin" Value="0,0,0,16" />
     </Style>
     <Style Selector="TextBox.form">
       <Setter Property="Background" Value="{DynamicResource InputBg}" />
@@ -395,11 +399,6 @@
     <Style Selector="TabControl">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Padding" Value="0" />
-    </Style>
-    <Style Selector="TabItem">
-      <Setter Property="FontSize" Value="12.5" />
-      <Setter Property="Padding" Value="18,9" />
-      <Setter Property="MinHeight" Value="40" />
     </Style>
     <Style Selector="TabItem:selected">
       <Setter Property="FontWeight" Value="SemiBold" />

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -419,7 +420,7 @@ public partial class MainWindow : Window
     static TextBlock SettingsTabHeader(string text) => new()
     {
         Text = text,
-        FontSize = 15.5,
+        FontSize = 16,
         FontWeight = FontWeight.Medium,
         VerticalAlignment = VerticalAlignment.Center
     };
@@ -441,6 +442,7 @@ public partial class MainWindow : Window
         tabs.Items.Add(new TabItem { Header = SettingsTabHeader("账号与连接"), Content = BuildAccountCard(message) });
         tabs.Items.Add(new TabItem { Header = SettingsTabHeader("外观"), Content = BuildAppearanceCard() });
         tabs.Items.Add(new TabItem { Header = SettingsTabHeader("音质与播放"), Content = BuildPlaybackCard() });
+        tabs.Items.Add(new TabItem { Header = SettingsTabHeader("关于"), Content = BuildAboutCard() });
 
         tabs.SelectedIndex = Math.Clamp(_settingsTab, 0, tabs.ItemCount - 1);
         tabs.SelectionChanged += (_, _) =>
@@ -483,6 +485,162 @@ public partial class MainWindow : Window
             content.Opacity = 1;
             content.RenderTransform = new TranslateTransform(0, 0);
         }, DispatcherPriority.Background);
+    }
+
+    // ---- 关于 ----
+
+    /// <summary>当前程序版本（取自程序集信息，发布时由流水线注入）。</summary>
+    static string AppVersionText
+    {
+        get
+        {
+            var info = typeof(MainWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+            var text = info?.InformationalVersion ?? "0.0.0";
+            var plus = text.IndexOf('+');
+            return plus >= 0 ? text[..plus] : text;
+        }
+    }
+
+    Control BuildAboutCard()
+    {
+        var body = new StackPanel { Spacing = 16, Width = 620 };
+
+        body.Children.Add(new TextBlock
+        {
+            Text = "25DogMusic 是基于 Avalonia 的桌面音乐客户端，连接飞牛 NAS 音乐服务，支持曲库浏览、搜索、播放、歌词与频谱。\n本项目仅用于访问你自己的飞牛音乐服务，不会上传任何数据。",
+            FontSize = 13,
+            Foreground = TextSecondary,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 22
+        });
+
+        var infoRow = new StackPanel { Spacing = 4 };
+        infoRow.Children.Add(new TextBlock
+        {
+            Text = $"当前版本：{AppVersionText}",
+            FontSize = 13,
+            Foreground = TextPrimary
+        });
+        infoRow.Children.Add(new TextBlock
+        {
+            Text = "更新来源：github.com/refout/25DogMusic/releases",
+            FontSize = 12,
+            Foreground = TextSecondary
+        });
+        body.Children.Add(infoRow);
+
+        var status = new TextBlock
+        {
+            Text = "点击右侧按钮从 GitHub 检查最新版本",
+            FontSize = 12.5,
+            Foreground = TextSecondary,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var checkButton = new Button
+        {
+            Content = "检查更新",
+            FontSize = 13,
+            Padding = new Thickness(16, 8),
+            CornerRadius = new CornerRadius(16),
+            Background = PillBg,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var checkRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12 };
+        checkRow.Children.Add(status);
+        Grid.SetColumn(checkButton, 1);
+        checkRow.Children.Add(checkButton);
+        body.Children.Add(checkRow);
+
+        checkButton.Click += async (_, _) => await CheckForUpdatesAsync(status, checkButton);
+
+        var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        links.Children.Add(MakeLinkButton("项目主页", "https://github.com/refout/25DogMusic"));
+        links.Children.Add(MakeLinkButton("下载页面", "https://github.com/refout/25DogMusic/releases"));
+        links.Children.Add(MakeLinkButton("问题反馈", "https://github.com/refout/25DogMusic/issues"));
+        body.Children.Add(links);
+
+        return MakeSettingsCard(body);
+    }
+
+    Button MakeLinkButton(string text, string url)
+    {
+        var button = new Button
+        {
+            Content = text,
+            FontSize = 12.5,
+            Padding = new Thickness(14, 7),
+            CornerRadius = new CornerRadius(15),
+            Background = PillBg
+        };
+        button.Click += (_, _) => OpenExternal(url);
+        return button;
+    }
+
+    static void OpenExternal(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch
+        {
+            // 打不开系统浏览器时忽略
+        }
+    }
+
+    async Task CheckForUpdatesAsync(TextBlock status, Button button)
+    {
+        button.IsEnabled = false;
+        status.Text = "正在检查更新…";
+
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("25DogMusic");
+
+            using var doc = JsonDocument.Parse(
+                await http.GetStringAsync("https://api.github.com/repos/refout/25DogMusic/releases/latest"));
+
+            var tag = doc.RootElement.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
+            var url = doc.RootElement.TryGetProperty("html_url", out var u) ? u.GetString() ?? "" : "";
+            var latest = tag.TrimStart('v', 'V');
+
+            if (CompareVersionText(latest, AppVersionText) > 0)
+            {
+                status.Text = $"发现新版本 {tag}，已打开下载页面";
+                if (url.Length > 0) OpenExternal(url);
+            }
+            else
+            {
+                status.Text = $"当前已是最新版本（{AppVersionText}）";
+            }
+        }
+        catch (Exception ex)
+        {
+            status.Text = $"检查更新失败：{ex.Message}";
+        }
+        finally
+        {
+            button.IsEnabled = true;
+        }
+    }
+
+    /// <summary>按段比较 x.y.z 版本号，忽略前缀 v 与预发布后缀。</summary>
+    static int CompareVersionText(string a, string b)
+    {
+        var pa = a.Split('.');
+        var pb = b.Split('.');
+        var count = Math.Max(pa.Length, pb.Length);
+
+        for (var i = 0; i < count; i++)
+        {
+            var x = i < pa.Length && int.TryParse(pa[i], out var vx) ? vx : 0;
+            var y = i < pb.Length && int.TryParse(pb[i], out var vy) ? vy : 0;
+            if (x != y) return x < y ? -1 : 1;
+        }
+        return 0;
     }
 
     // ---- 播放列表抽屉 ----

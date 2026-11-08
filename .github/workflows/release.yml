@@ -44,6 +44,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang zlib1g-dev libvlc-dev vlc-plugin-base
 
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $env:GITHUB_REF_NAME.TrimStart('v', 'V')
+          } else {
+            "0.0.0-dev.$env:GITHUB_RUN_NUMBER"
+          }
+          "APP_VERSION=$ver" >> $env:GITHUB_ENV
+
       - name: Publish (AOT, ${{ matrix.rid }})
         shell: pwsh
         run: >
@@ -52,6 +62,7 @@ jobs:
           -r ${{ matrix.rid }}
           --self-contained true
           -p:PublishAot=true
+          -p:Version=$env:APP_VERSION
           -p:DebugType=None
           -p:DebugSymbols=false
           -p:CopyOutputSymbolsToPublishDirectory=false
