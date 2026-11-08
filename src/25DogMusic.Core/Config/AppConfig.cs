@@ -6,7 +6,7 @@ namespace FnMusic.Config;
 /// <summary>本地配置：服务器地址、deviceId、登录令牌（不保存明文密码）。</summary>
 public sealed class AppConfig
 {
-    public string BaseUrl { get; set; } = "https://10.0.0.10";
+    public string BaseUrl { get; set; } = "";
     public string DeviceId { get; set; } = string.Empty;
     public string? Token { get; set; }
     public string? LastUsername { get; set; }

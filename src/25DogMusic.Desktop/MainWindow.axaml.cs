@@ -340,10 +340,7 @@ public partial class MainWindow : Window
         ListScroll.ScrollChanged += (_, _) => OnListScrolled();
         ContentScroll.ScrollChanged += (_, _) => OnContentScrolled();
 
-        _player = new VlcPlayer();
-        _player.Volume = MapVolume(_config.Volume);
-        _player.EndReached += (_, _) => Dispatcher.UIThread.Post(OnEndReached);
-
+        // VLC 初始化推迟到窗口显示后（或首次播放时），避免拖慢启动
         _tray = CreateTrayIcon();
 
         _shuffle = _config.StartShuffle;
@@ -353,7 +350,6 @@ public partial class MainWindow : Window
 
         OverlaySpectrum.Analyzer = _spectrum;
         OverlaySpectrum.BarBrush = AccentSoft;
-        _player.ApplyEqualizer(_config.EqPresetIndex);
 
         DesktopLyricsButton.Click += (_, _) =>
         {
@@ -372,6 +368,8 @@ public partial class MainWindow : Window
             if (_config.DesktopLyrics) ApplyDesktopLyrics();
             // 窗口句柄就绪后再设置一次系统标题栏，Win10 也能拿到深色标题栏
             WindowChrome.ApplyTitleBar(this, !IsLight, _windowBaseColor);
+            // 空闲时预热播放器，避免首次点播放时才有几百毫秒延迟
+            Dispatcher.UIThread.Post(() => EnsurePlayer(), DispatcherPriority.Background);
         };
 
         if (!string.IsNullOrWhiteSpace(_config.Token))
@@ -385,11 +383,26 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>懒初始化 VLC：窗口显示后再创建，首次播放前也会自动创建。</summary>
+    VlcPlayer EnsurePlayer()
+    {
+        if (_player is not null) return _player;
+
+        var player = new VlcPlayer();
+        player.Volume = MapVolume(_config.Volume);
+        player.EndReached += (_, _) => Dispatcher.UIThread.Post(OnEndReached);
+        player.ApplyEqualizer(_config.EqPresetIndex);
+        _player = player;
+        return player;
+    }
+
     async Task InitialLoadAsync()
     {
-        await RefreshFavoriteGuidsAsync();
-        await RefreshSidebarPlaylistsAsync();
-        await LoadHomeAsync();
+        // 收藏状态、侧边歌单、首页数据互不依赖，并行加载以缩短首屏时间
+        await Task.WhenAll(
+            RefreshFavoriteGuidsAsync(),
+            RefreshSidebarPlaylistsAsync(),
+            LoadHomeAsync());
     }
 
     /// <summary>滑块 0-100 按平方曲线映射到播放器音量：听感更接近线性，两端不会突变。</summary>
@@ -906,7 +919,7 @@ public partial class MainWindow : Window
             return MakeSettingsCard(infoBody);
         }
 
-        var serverBox = MakeFormBox(_config.BaseUrl, "https://10.0.0.10");
+        var serverBox = MakeFormBox(_config.BaseUrl, "https://nas.example.com");
         var userBox = MakeFormBox(_config.LastUsername ?? string.Empty, "用户名");
         var passBox = MakeFormBox(string.Empty, "密码");
         passBox.PasswordChar = '*';
@@ -3310,49 +3323,45 @@ public partial class MainWindow : Window
         SetActiveNav(NavHome);
         BeginPage("首页", string.Empty);
 
-        var recent = new List<Track>();
-        try
+        // 最近播放 / 收藏 / 最近添加 / 专辑互不依赖，并行请求以缩短首屏时间
+        async Task<List<Track>> FetchTracksAsync(Func<Task<JsonDocument>> fetch, int take, string what)
         {
-            using var doc = await Api().GetPlayHistoryAsync(1, 20);
-            recent = Library.ParseTracks(doc).Take(12).ToList();
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "加载最近播放失败");
-        }
-
-        var favorites = new List<Track>();
-        try
-        {
-            using var doc = await Api().GetFavoritesAsync(1, 12);
-            favorites = Library.ParseTracks(doc);
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "加载收藏失败");
+            try
+            {
+                using var doc = await fetch();
+                return Library.ParseTracks(doc).Take(take).ToList();
+            }
+            catch (Exception ex)
+            {
+                HandleError(ex, what);
+                return new List<Track>();
+            }
         }
 
-        var albums = new List<Album>();
-        try
+        async Task<List<Album>> FetchAlbumListAsync(Func<Task<JsonDocument>> fetch, int take, string what)
         {
-            using var doc = await Api().GetAlbumsAsync(1, 8);
-            albums = Library.ParseAlbums(doc).Take(8).ToList();
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "加载专辑失败");
+            try
+            {
+                using var doc = await fetch();
+                return Library.ParseAlbums(doc).Take(take).ToList();
+            }
+            catch (Exception ex)
+            {
+                HandleError(ex, what);
+                return new List<Album>();
+            }
         }
 
-        var latest = new List<Track>();
-        try
-        {
-            using var doc = await Api().GetTracksAsync(1, 12);
-            latest = Library.ParseTracks(doc).Take(12).ToList();
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex, "加载最近添加歌曲失败");
-        }
+        var recentTask = FetchTracksAsync(() => Api().GetPlayHistoryAsync(1, 20), 12, "加载最近播放失败");
+        var favoritesTask = FetchTracksAsync(() => Api().GetFavoritesAsync(1, 12), 12, "加载收藏失败");
+        var latestTask = FetchTracksAsync(() => Api().GetTracksAsync(1, 12), 12, "加载最近添加歌曲失败");
+        var albumsTask = FetchAlbumListAsync(() => Api().GetAlbumsAsync(1, 8), 8, "加载专辑失败");
+
+        await Task.WhenAll(recentTask, favoritesTask, latestTask, albumsTask);
+        var recent = recentTask.Result;
+        var favorites = favoritesTask.Result;
+        var latest = latestTask.Result;
+        var albums = albumsTask.Result;
 
         // 顶部四个入口卡片：封面拼贴 + 标题，正方形并随宽度自适应
         var shortcutCovers = new List<(string?, Image)>();
@@ -4601,11 +4610,12 @@ public partial class MainWindow : Window
 
     void TogglePlay()
     {
-        if (_player is null) return;
+        if (_currentTrack is null && _queue.Count == 0) return;
+        var player = EnsurePlayer();
 
-        if (_player.IsPlaying)
+        if (player.IsPlaying)
         {
-            _player.TogglePause();
+            player.TogglePause();
             _paused = true;
             SetPlayIcon(false);
             SyncTimer();
@@ -4614,7 +4624,7 @@ public partial class MainWindow : Window
 
         if (_paused && _currentTrack is not null)
         {
-            _player.TogglePause();
+            player.TogglePause();
             _paused = false;
             SetPlayIcon(true);
             SyncTimer();
@@ -4634,10 +4644,10 @@ public partial class MainWindow : Window
 
     void PlayTrack(Track track)
     {
-        if (_player is null) return;
         if (_proxy is null) Api();
+        var player = EnsurePlayer();
 
-        _player.Play(_proxy!.BaseUrl + track.Guid);
+        player.Play(_proxy!.BaseUrl + track.Guid);
         _paused = false;
         _ended = false;
         _currentTrack = track;
@@ -5116,7 +5126,7 @@ public partial class MainWindow : Window
         {
             var tray = new TrayIcon
             {
-                Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://25DogMusic.Desktop/Assets/appicon.ico"))),
+                Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://25DogMusic/Assets/appicon.ico"))),
                 ToolTipText = "25DogMusic",
                 IsVisible = true
             };

@@ -27,7 +27,7 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=..\src\25DogMusic.Desktop\Assets\appicon.ico
-UninstallDisplayIcon={app}\25DogMusic.Desktop.exe
+UninstallDisplayIcon={app}\25DogMusic.exe
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
@@ -40,8 +40,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Source: "{#PUBLISH_DIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\25DogMusic"; Filename: "{app}\25DogMusic.Desktop.exe"
-Name: "{autodesktop}\25DogMusic"; Filename: "{app}\25DogMusic.Desktop.exe"; Tasks: desktopicon
+Name: "{group}\25DogMusic"; Filename: "{app}\25DogMusic.exe"
+Name: "{autodesktop}\25DogMusic"; Filename: "{app}\25DogMusic.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\25DogMusic.Desktop.exe"; Description: "运行 25DogMusic"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\25DogMusic.exe"; Description: "运行 25DogMusic"; Flags: nowait postinstall skipifsilent

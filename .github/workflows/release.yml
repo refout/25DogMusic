@@ -225,7 +225,7 @@ jobs:
           DIR="$(cd "$(dirname "$0")" && pwd)"
           export LD_LIBRARY_PATH="$DIR/libvlc/linux-x64:$DIR/libvlc/linux-x64/sysdeps${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export VLC_PLUGIN_PATH="$DIR/libvlc/linux-x64/plugins"
-          exec "$DIR/25DogMusic.Desktop" "$@"
+          exec "$DIR/25DogMusic" "$@"
           SH
           chmod +x "$OUT/25DogMusic.sh"
 
@@ -300,12 +300,12 @@ jobs:
             <key>CFBundleVersion</key><string>1</string>
             <key>CFBundleShortVersionString</key><string>1.0</string>
             <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleExecutable</key><string>25DogMusic.Desktop</string>
+            <key>CFBundleExecutable</key><string>25DogMusic</string>
             <key>NSHighResolutionCapable</key><true/>
           </dict>
           </plist>
           PLIST
-          chmod +x "$APP/Contents/MacOS/25DogMusic.Desktop"
+          chmod +x "$APP/Contents/MacOS/25DogMusic"
 
           VER="${GITHUB_REF_NAME}"
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then VER="dev-${GITHUB_RUN_NUMBER}"; fi
