@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>25DogMusic · 飞牛音乐桌面客户端</title>
-<meta name="description" content="基于 Avalonia 的 Windows 桌面音乐客户端，连接飞牛 NAS 音乐服务。">
+<meta name="description" content="基于 Avalonia 的跨平台桌面音乐客户端，连接飞牛 NAS 音乐服务。">
 <style>
   :root {
     --bg: #0d0b10;
@@ -140,7 +140,7 @@
 
 <main id="top">
   <div class="wrap hero">
-    <span class="pill">Avalonia · Windows · 飞牛 NAS</span>
+    <span class="pill">Avalonia · 跨平台 · 飞牛 NAS</span>
     <h1>为飞牛 NAS 打造的<br><span class="grad">桌面音乐客户端</span></h1>
     <p class="lead">浏览、搜索、播放与歌词一体化。深色界面、封面取色、实时频谱与桌面歌词浮窗，让曲库听感更完整。</p>
     <div class="actions">
@@ -151,7 +151,7 @@
         查看源码
       </a>
     </div>
-    <p class="meta">Windows x64 · .NET 10 · 发布包为 NativeAOT 单文件程序</p>
+    <p class="meta">Windows x64 · Linux x64 · macOS Apple Silicon · .NET 10 · NativeAOT 单文件，发布包为纯音频裁剪</p>
   </div>
 
   <div class="wrap shot" id="shot">
@@ -206,6 +206,11 @@
           <h3>后台播放</h3>
           <p>关闭窗口后可继续播放并驻留托盘，随时呼出控制。</p>
         </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></div>
+          <h3>设置与关于</h3>
+          <p>账号连接、外观、音质与播放分组配置；关于页展示版本说明并支持检查更新。</p>
+        </div>
       </div>
     </div>
   </section>
@@ -232,7 +237,7 @@
     <div class="wrap">
       <div class="eyebrow">Build</div>
       <h2>本地构建</h2>
-      <p class="sub">需要 Windows 与 .NET 10 SDK；桌面客户端启动后填写飞牛 NAS 地址并登录即可使用。</p>
+      <p class="sub">需要 .NET 10 SDK；桌面客户端启动后填写飞牛 NAS 地址并登录即可使用，登录信息只保存在本机。</p>
       <div class="build">
         <div class="code"><span class="c"># 还原并构建解决方案</span>
 <span class="k">dotnet</span> build src/25DogMusic.slnx
@@ -246,11 +251,12 @@
   -p:PublishAot=true -o publish/win-x64</div>
         <div>
           <p style="color:var(--muted);margin-top:0">
-            每次推送到 <code>main</code> 会自动构建；推送 <code>v*</code> 标签则会触发 AOT 发布并生成
-            <code>25DogMusic-&lt;版本&gt;-win-x64.zip</code>，同时创建 GitHub Release。
+            每次推送到 <code>main</code> 会自动构建；推送 <code>v*</code> 标签则会触发 AOT 发布并创建 GitHub Release，
+            同时产出 Windows zip / 安装包、Linux tar.gz 与 macOS zip。版本号由标签注入，显示在「关于」页。
           </p>
           <p style="color:var(--muted)">
-            登录信息与播放偏好保存在 <code>%LOCALAPPDATA%\FnMusic\config.json</code>。
+            发布包按白名单只保留音频相关的 VLC 插件，登录信息与播放偏好保存在本机
+            <code>%LOCALAPPDATA%\FnMusic\config.json</code>（macOS / Linux 为对应应用数据目录），程序本身不内置任何服务器地址。
           </p>
           <a class="btn btn-ghost" href="https://github.com/refout/25DogMusic/releases" target="_blank" rel="noopener">查看发布记录</a>
         </div>
