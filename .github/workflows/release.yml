@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish (AOT, win-x64)
+        run: >
+          dotnet publish src/25DogMusic.Desktop/25DogMusic.Desktop.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishAot=true
+          -o publish/25DogMusic-win-x64
+
+      - name: Verify output
+        shell: pwsh
+        run: |
+          $exe = "publish/25DogMusic-win-x64/25DogMusic.Desktop.exe"
+          if (-not (Test-Path $exe)) { throw "未找到发布产物: $exe" }
+          Get-Item $exe | Select-Object FullName, Length
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$env:GITHUB_RUN_NUMBER" }
+          $zip = "25DogMusic-$ver-win-x64.zip"
+          Compress-Archive -Path "publish/25DogMusic-win-x64/*" -DestinationPath $zip -Force
+          "PKG_ZIP=$zip" >> $env:GITHUB_ENV
+          "PKG_VERSION=$ver" >> $env:GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 25DogMusic-win-x64
+          path: ${{ env.PKG_ZIP }}
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" "$env:PKG_ZIP" `
+            --title "25DogMusic $env:GITHUB_REF_NAME" `
+            --generate-notes
