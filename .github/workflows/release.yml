@@ -115,6 +115,11 @@ jobs:
           }
           if (-not $iscc) { throw "未找到 Inno Setup 的 ISCC.exe" }
 
+          # 安装包安装器不自带中文语言文件，使用仓库内的一份
+          $langDir = Join-Path (Get-Item $iscc).Directory.FullName "Languages"
+          New-Item -ItemType Directory -Path $langDir -Force | Out-Null
+          Copy-Item "installer/ChineseSimplified.isl" (Join-Path $langDir "ChineseSimplified.isl") -Force
+
           $ver = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-$env:GITHUB_RUN_NUMBER" }
           & $iscc "/DAPP_VERSION=$ver" "installer/25DogMusic.iss"
           Get-ChildItem dist
