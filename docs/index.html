@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>25DogMusic · 飞牛音乐桌面客户端</title>
+<meta name="description" content="基于 Avalonia 的 Windows 桌面音乐客户端，连接飞牛 NAS 音乐服务。">
+<style>
+  :root {
+    --bg: #0d0b10;
+    --bg-soft: #15121b;
+    --card: rgba(255, 255, 255, 0.045);
+    --border: rgba(255, 255, 255, 0.09);
+    --text: #f5f2f7;
+    --muted: #a79fb3;
+    --accent: #ff375f;
+    --accent-soft: rgba(255, 55, 95, 0.14);
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(900px 520px at 12% -10%, rgba(255, 55, 95, 0.22), transparent 60%),
+      radial-gradient(760px 480px at 92% 4%, rgba(120, 80, 255, 0.16), transparent 62%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(14px);
+    background: rgba(13, 11, 16, 0.72);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .3px; }
+  .logo {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(140deg, var(--accent), #a03bff);
+    display: grid; place-items: center; font-size: 15px; font-weight: 700;
+  }
+  .nav-links { display: flex; gap: 22px; font-size: 14px; color: var(--muted); }
+  .nav-links a:hover { color: var(--text); }
+
+  .hero { padding: 92px 0 56px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 999px;
+    background: var(--accent-soft); border: 1px solid rgba(255, 55, 95, 0.3);
+    color: #ffd7e0; font-size: 13px;
+  }
+  h1 { font-size: clamp(34px, 5.4vw, 60px); line-height: 1.15; margin: 22px 0 14px; letter-spacing: -1px; }
+  h1 .grad {
+    background: linear-gradient(100deg, #ff7a96, var(--accent) 45%, #b06bff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lead { max-width: 640px; color: var(--muted); font-size: 17px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 12px 22px; border-radius: 12px; font-weight: 600; font-size: 15px;
+    border: 1px solid var(--border); transition: transform .18s ease, background .18s ease, border-color .18s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: var(--accent); border-color: transparent; color: #fff; box-shadow: 0 10px 26px rgba(255, 55, 95, .3); }
+  .btn-ghost { background: var(--card); color: var(--text); }
+  .btn-ghost:hover { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .18); }
+  .meta { margin-top: 18px; font-size: 13px; color: var(--muted); }
+
+  .shot { padding: 18px 0 70px; }
+  .shot-frame {
+    border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    background: var(--bg-soft); box-shadow: 0 40px 90px rgba(0, 0, 0, .55);
+  }
+  .shot-frame img { display: block; width: 100%; height: auto; }
+
+  section { padding: 64px 0; }
+  .eyebrow { color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+  h2 { font-size: clamp(24px, 3vw, 32px); margin: 10px 0 10px; letter-spacing: -.4px; }
+  .sub { color: var(--muted); max-width: 680px; margin-bottom: 34px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; transition: transform .2s ease, border-color .2s ease, background .2s ease;
+  }
+  .card:hover { transform: translateY(-3px); border-color: rgba(255, 55, 95, .35); background: rgba(255, 255, 255, .06); }
+  .icon {
+    width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); margin-bottom: 14px;
+  }
+  .icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .card h3 { font-size: 16px; margin: 0 0 6px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .stack { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+  .chip { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font-size: 13px; color: var(--muted); }
+
+  .build { display: grid; grid-template-columns: 1.05fr 1fr; gap: 28px; align-items: start; }
+  .code {
+    background: #100d15; border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px; font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 13px; color: #d6cfe3; overflow-x: auto; white-space: pre;
+  }
+  .code .c { color: #7c7488; }
+  .code .k { color: #ff9bb0; }
+
+  footer { border-top: 1px solid var(--border); padding: 30px 0 46px; color: var(--muted); font-size: 13px; }
+  .foot { display: flex; flex-wrap: wrap; gap: 14px 28px; justify-content: space-between; }
+  .foot a:hover { color: var(--text); }
+
+  @media (max-width: 780px) {
+    .nav-links { display: none; }
+    .build { grid-template-columns: 1fr; }
+    .hero { padding: 64px 0 40px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top"><span class="logo">25</span>25DogMusic</a>
+    <nav class="nav-links">
+      <a href="#features">功能</a>
+      <a href="#shot">界面</a>
+      <a href="#stack">技术栈</a>
+      <a href="#build">构建</a>
+      <a href="https://github.com/refout/25DogMusic" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <span class="pill">Avalonia · Windows · 飞牛 NAS</span>
+    <h1>为飞牛 NAS 打造的<br><span class="grad">桌面音乐客户端</span></h1>
+    <p class="lead">浏览、搜索、播放与歌词一体化。深色界面、封面取色、实时频谱与桌面歌词浮窗，让曲库听感更完整。</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="https://github.com/refout/25DogMusic/releases/latest" target="_blank" rel="noopener">
+        下载最新版本
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/refout/25DogMusic" target="_blank" rel="noopener">
+        查看源码
+      </a>
+    </div>
+    <p class="meta">Windows x64 · .NET 10 · 发布包为 NativeAOT 单文件程序</p>
+  </div>
+
+  <div class="wrap shot" id="shot">
+    <div class="shot-frame">
+      <img src="assets/home.png" alt="25DogMusic 桌面客户端界面预览" loading="lazy">
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="eyebrow">Features</div>
+      <h2>曲库浏览到播放，一应俱全</h2>
+      <p class="sub">围绕 NAS 音乐库的日常使用场景设计：分类浏览、快速搜索、队列播放与歌词同步。</p>
+      <div class="grid">
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h12"/></svg></div>
+          <h3>分类浏览</h3>
+          <p>专辑、歌手、风格、文件夹、收藏与最近播放，滚动到底自动加载下一页。</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></div>
+          <h3>分类搜索</h3>
+          <p>歌曲 / 专辑 / 歌手 / 歌单以 Tab 分栏展示，各自独立滚动分页。</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="19" cy="16" r="3"/></svg></div>
+          <h3>播放与队列</h3>
+          <p>全屏播放页、播放队列侧边抽屉，支持从歌单直接勾选添加歌曲。</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M3 12h3l2-5 3 10 2-7 2 4h3"/></svg></div>
+          <h3>实时频谱</h3>
+          <p>基于 WASAPI 环回采集的频谱可视化，跟随播放起伏并内置均衡器预设。</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h14"/></svg></div>
+          <h3>桌面歌词</h3>
+          <p>可拖动的置顶歌词浮窗，仅在当前曲目有歌词时出现，切歌自动收起。</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.3 5.5.8-4 4 1 5.9-5-2.8-5 2.8 1-5.9-4-4 5.5-.8z"/></svg></div>
+          <h3>漫游发现</h3>
+          <p>随机漫游曲库，下方展示漫游队列卡片，点击即可切换当前曲目。</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 100 18 9 9 0 000-18z"/><path d="M9 12l2 2 4-4"/></svg></div>
+          <h3>原生观感</h3>
+          <p>Windows 11 云母材质与圆角、覆盖取色的沉浸背景，Windows 10 亦有适配。</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
+          <h3>后台播放</h3>
+          <p>关闭窗口后可继续播放并驻留托盘，随时呼出控制。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="stack">
+    <div class="wrap">
+      <div class="eyebrow">Stack</div>
+      <h2>技术栈</h2>
+      <p class="sub">跨平台 UI 框架 + 原生音视频内核，Release 使用 NativeAOT 编译为独立可执行文件。</p>
+      <div class="stack">
+        <span class="chip">Avalonia 12.1.5</span>
+        <span class="chip">.NET 10</span>
+        <span class="chip">C#</span>
+        <span class="chip">LibVLCSharp</span>
+        <span class="chip">NAudio</span>
+        <span class="chip">FluentIcons</span>
+        <span class="chip">NativeAOT</span>
+        <span class="chip">GitHub Actions</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="build">
+    <div class="wrap">
+      <div class="eyebrow">Build</div>
+      <h2>本地构建</h2>
+      <p class="sub">需要 Windows 与 .NET 10 SDK；桌面客户端启动后填写飞牛 NAS 地址并登录即可使用。</p>
+      <div class="build">
+        <div class="code"><span class="c"># 还原并构建解决方案</span>
+<span class="k">dotnet</span> build src/25DogMusic.slnx
+
+<span class="c"># 启动桌面客户端</span>
+<span class="k">dotnet</span> run --project src/25DogMusic.Desktop
+
+<span class="c"># NativeAOT 打包（需 VS C++ 桌面开发组件）</span>
+<span class="k">dotnet</span> publish src/25DogMusic.Desktop/25DogMusic.Desktop.csproj `
+  -c Release -r win-x64 --self-contained `
+  -p:PublishAot=true -o publish/win-x64</div>
+        <div>
+          <p style="color:var(--muted);margin-top:0">
+            每次推送到 <code>main</code> 会自动构建；推送 <code>v*</code> 标签则会触发 AOT 发布并生成
+            <code>25DogMusic-&lt;版本&gt;-win-x64.zip</code>，同时创建 GitHub Release。
+          </p>
+          <p style="color:var(--muted)">
+            登录信息与播放偏好保存在 <code>%LOCALAPPDATA%\FnMusic\config.json</code>。
+          </p>
+          <a class="btn btn-ghost" href="https://github.com/refout/25DogMusic/releases" target="_blank" rel="noopener">查看发布记录</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>25DogMusic · 飞牛 NAS 桌面音乐客户端</span>
+    <span>
+      <a href="https://github.com/refout/25DogMusic" target="_blank" rel="noopener">GitHub</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/refout/25DogMusic/releases" target="_blank" rel="noopener">Releases</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/refout/25DogMusic/issues" target="_blank" rel="noopener">Issues</a>
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>
