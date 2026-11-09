@@ -417,14 +417,6 @@ public partial class MainWindow : Window
 
     int _settingsTab;
 
-    static TextBlock SettingsTabHeader(string text) => new()
-    {
-        Text = text,
-        FontSize = 16,
-        FontWeight = FontWeight.Medium,
-        VerticalAlignment = VerticalAlignment.Center
-    };
-
     void ShowSettingsPage(string? message = null)
     {
         _mode = Mode.Settings;
@@ -439,10 +431,11 @@ public partial class MainWindow : Window
             Margin = new Thickness(0, 8, 0, 0)
         };
 
-        tabs.Items.Add(new TabItem { Header = SettingsTabHeader("账号与连接"), Content = BuildAccountCard(message) });
-        tabs.Items.Add(new TabItem { Header = SettingsTabHeader("外观"), Content = BuildAppearanceCard() });
-        tabs.Items.Add(new TabItem { Header = SettingsTabHeader("音质与播放"), Content = BuildPlaybackCard() });
-        tabs.Items.Add(new TabItem { Header = SettingsTabHeader("关于"), Content = BuildAboutCard() });
+        // 使用 Fluent 主题默认的 TabItem 外观，仅提供标题文本
+        tabs.Items.Add(new TabItem { Header = "账号与连接", Content = BuildAccountCard(message) });
+        tabs.Items.Add(new TabItem { Header = "外观", Content = BuildAppearanceCard() });
+        tabs.Items.Add(new TabItem { Header = "音质与播放", Content = BuildPlaybackCard() });
+        tabs.Items.Add(new TabItem { Header = "关于", Content = BuildAboutCard() });
 
         tabs.SelectedIndex = Math.Clamp(_settingsTab, 0, tabs.ItemCount - 1);
         tabs.SelectionChanged += (_, _) =>
@@ -2010,6 +2003,25 @@ public partial class MainWindow : Window
         _rowBorders.Clear();
         _heartIcons.Clear();
         _rowNumbers.Clear();
+
+        TrimHeapAfterNavigation();
+    }
+
+    /// <summary>
+    /// 整页控件在切换后会集中失效，但位图、样式的托管堆不会自行回落。
+    /// 堆增长到一定规模后延迟做一次后台回收，避免长时间浏览内存持续上涨。
+    /// </summary>
+    static void TrimHeapAfterNavigation()
+    {
+        if (GC.GetTotalMemory(forceFullCollection: false) < 24 * 1024 * 1024) return;
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            GC.Collect(2, GCCollectionMode.Forced, blocking: false, compacting: true);
+        };
+        timer.Start();
     }
 
     /// <summary>页面顶部只保留右上角操作按钮，标题与副标题已从界面移除。</summary>

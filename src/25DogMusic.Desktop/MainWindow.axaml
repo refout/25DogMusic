@@ -334,19 +334,6 @@
       <Setter Property="Opacity" Value="0.75" />
     </Style>
 
-    <Style Selector="TabItem">
-      <Setter Property="FontSize" Value="16" />
-      <Setter Property="MinHeight" Value="54" />
-      <Setter Property="Padding" Value="22,10,22,0" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-    </Style>
-    <Style Selector="TabItem TextBlock">
-      <Setter Property="FontSize" Value="16" />
-    </Style>
-    <!-- 让选中文案与底部指示线之间留出间距（默认模板把指示线贴在文字下方） -->
-    <Style Selector="TabItem /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Margin" Value="0,0,0,16" />
-    </Style>
     <Style Selector="TextBox.form">
       <Setter Property="Background" Value="{DynamicResource InputBg}" />
       <Setter Property="BorderBrush" Value="{DynamicResource InputBorder}" />
@@ -395,13 +382,6 @@
     </Style>
     <Style Selector="Slider /template/ Thumb">
       <Setter Property="RenderTransformOrigin" Value="50%,50%" />
-    </Style>
-    <Style Selector="TabControl">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Padding" Value="0" />
-    </Style>
-    <Style Selector="TabItem:selected">
-      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Border.glassglow">
       <Style.Animations>

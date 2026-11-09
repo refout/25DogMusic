@@ -21,6 +21,12 @@ public sealed class SpectrumAnalyzer : IDisposable
     int _filled;
 
     readonly float[] _levels = new float[BandCount];
+    // 复用缓冲区，避免每次回调/每帧都分配（频谱长时间运行时的 GC 主要来源）
+    float[] _mono = new float[2048];
+    readonly float[] _samples = new float[FftSize];
+    readonly double[] _re = new double[FftSize];
+    readonly double[] _im = new double[FftSize];
+    readonly float[] _magnitude = new float[FftSize / 2];
     bool _running;
 
     public bool IsRunning
@@ -84,13 +90,13 @@ public sealed class SpectrumAnalyzer : IDisposable
         var channels = Math.Max(1, format.Channels);
         var bytesAvailable = Math.Min(e.Buffer.Length, e.BytesRecorded);
         var count = 0;
-        float[]? mono = null;
+        float[] mono;
 
         if (format.Encoding == WaveFormatEncoding.IeeeFloat && format.BitsPerSample == 32)
         {
             count = bytesAvailable / 4 / channels;
             if (count <= 0) return;
-            mono = new float[count];
+            mono = EnsureMonoBuffer(count);
             var bytes = e.Buffer;
             for (var i = 0; i < count; i++)
             {
@@ -107,7 +113,7 @@ public sealed class SpectrumAnalyzer : IDisposable
         {
             count = bytesAvailable / 2 / channels;
             if (count <= 0) return;
-            mono = new float[count];
+            mono = EnsureMonoBuffer(count);
             var bytes = e.Buffer;
             for (var i = 0; i < count; i++)
             {
@@ -120,18 +126,27 @@ public sealed class SpectrumAnalyzer : IDisposable
                 mono[i] = sum / channels;
             }
         }
-
-        if (mono is null) return;
+        else
+        {
+            return;
+        }
 
         lock (_lock)
         {
-            foreach (var sample in mono)
+            for (var i = 0; i < count; i++)
             {
-                _ring[_write] = sample;
+                _ring[_write] = mono[i];
                 _write = (_write + 1) % _ring.Length;
                 if (_filled < _ring.Length) _filled++;
             }
         }
+    }
+
+    /// <summary>取一个足够大的复用采样缓冲（容量增长后保持不变）。</summary>
+    float[] EnsureMonoBuffer(int count)
+    {
+        if (_mono.Length < count) _mono = new float[count];
+        return _mono;
     }
 
     /// <summary>取当前 28 个频段的能量（0~1），带平滑衰减。</summary>
@@ -148,7 +163,7 @@ public sealed class SpectrumAnalyzer : IDisposable
                 return _levels.ToArray();
             }
 
-            samples = new float[FftSize];
+            samples = _samples;
             var start = (_write - FftSize + _ring.Length) % _ring.Length;
             for (var i = 0; i < FftSize; i++) samples[i] = _ring[(start + i) % _ring.Length];
         }
@@ -191,11 +206,12 @@ public sealed class SpectrumAnalyzer : IDisposable
         }
     }
 
-    static float[] Transform(float[] input)
+    float[] Transform(float[] input)
     {
         var n = input.Length;
-        var re = new double[n];
-        var im = new double[n];
+        var re = _re;
+        var im = _im;
+        Array.Clear(im);
 
         for (var i = 0; i < n; i++)
         {
@@ -246,7 +262,7 @@ public sealed class SpectrumAnalyzer : IDisposable
             }
         }
 
-        var magnitude = new float[n / 2];
+        var magnitude = _magnitude;
         for (var i = 0; i < n / 2; i++)
         {
             magnitude[i] = (float)Math.Sqrt(re[i] * re[i] + im[i] * im[i]) / (n / 2);
