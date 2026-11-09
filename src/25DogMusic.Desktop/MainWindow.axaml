@@ -8,7 +8,7 @@
         x:Class="_25DogMusic.Desktop.MainWindow"
         Title="25DogMusic · 飞牛音乐"
         Icon="/Assets/appicon.ico"
-        Width="1280" Height="840" MinWidth="1040" MinHeight="660"
+        Width="1280" Height="840" MinWidth="680" MinHeight="600"
         Background="{DynamicResource PageBg}">
   <Window.Resources>
     <x:Double x:Key="SliderTrackThemeHeight">8</x:Double>
@@ -609,7 +609,10 @@
         </Border>
 
         <Grid Grid.Column="1">
-          <ScrollViewer x:Name="ContentScroll" Margin="30,24,30,8" VerticalScrollBarVisibility="Auto">
+          <ScrollViewer x:Name="ContentScroll" Margin="30,24,30,8"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled"
+                        HorizontalContentAlignment="Stretch">
             <StackPanel x:Name="ContentPanel" Spacing="14" Margin="0,0,6,0" />
           </ScrollViewer>
 
