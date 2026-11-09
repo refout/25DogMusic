@@ -551,44 +551,43 @@ public partial class MainWindow : Window
             FontSize = 13,
             Foreground = TextPrimary
         });
-        infoRow.Children.Add(new TextBlock
-        {
-            Text = "更新来源：github.com/refout/25DogMusic/releases",
-            FontSize = 12,
-            Foreground = TextSecondary
-        });
-        body.Children.Add(infoRow);
 
         var status = new TextBlock
         {
-            Text = "点击右侧按钮从 GitHub 检查最新版本",
-            FontSize = 12.5,
+            Text = string.Empty,
+            FontSize = 12,
             Foreground = TextSecondary,
             TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center
+            IsVisible = false
         };
-        var checkButton = new Button
+
+        // 「检查更新」作为内联链接放在说明文字里，不再使用独立按钮
+        var sourceLine = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        sourceLine.Children.Add(new TextBlock
         {
-            Content = "检查更新",
-            FontSize = 13,
-            Padding = new Thickness(16, 8),
-            CornerRadius = new CornerRadius(16),
-            Background = PillBg,
+            Text = "更新来源：github.com/refout/25DogMusic/releases",
+            FontSize = 12,
+            Foreground = TextSecondary,
             VerticalAlignment = VerticalAlignment.Center
-        };
+        });
+        sourceLine.Children.Add(new TextBlock
+        {
+            Text = "·",
+            FontSize = 12,
+            Foreground = TextSecondary,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        sourceLine.Children.Add(MakeLinkText("检查更新", () => _ = CheckForUpdatesAsync(status)));
+        infoRow.Children.Add(sourceLine);
+        body.Children.Add(infoRow);
+        body.Children.Add(status);
 
-        var checkRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12 };
-        checkRow.Children.Add(status);
-        Grid.SetColumn(checkButton, 1);
-        checkRow.Children.Add(checkButton);
-        body.Children.Add(checkRow);
-
-        checkButton.Click += async (_, _) => await CheckForUpdatesAsync(status, checkButton);
-
-        var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-        links.Children.Add(MakeLinkButton("项目主页", "https://refout.github.io/25DogMusic/"));
-        links.Children.Add(MakeLinkButton("下载页面", "https://github.com/refout/25DogMusic/releases"));
-        links.Children.Add(MakeLinkButton("问题反馈", "https://github.com/refout/25DogMusic/issues"));
+        var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        links.Children.Add(MakeLinkText("项目主页", "https://refout.github.io/25DogMusic/"));
+        links.Children.Add(MakeLinkSeparator());
+        links.Children.Add(MakeLinkText("下载页面", "https://github.com/refout/25DogMusic/releases"));
+        links.Children.Add(MakeLinkSeparator());
+        links.Children.Add(MakeLinkText("问题反馈", "https://github.com/refout/25DogMusic/issues"));
         body.Children.Add(links);
 
         body.Children.Add(AboutSection(
@@ -609,9 +608,32 @@ public partial class MainWindow : Window
             "4. 软件按「现状」提供，不附带任何明示或暗示的担保；使用风险由使用者自行承担。\n" +
             "5. 播放内核（VLC）遵循其自身许可证，本程序以动态链接方式使用。"));
 
-        body.Children.Add(AboutSection(
-            "开源协议",
-            "本项目以 MIT 协议开源，可自由使用、修改与分发，请保留版权与许可声明。"));
+        var license = new StackPanel { Spacing = 6 };
+        license.Children.Add(new TextBlock
+        {
+            Text = "开源协议",
+            FontSize = 13,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = TextPrimary
+        });
+        var licenseLine = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        licenseLine.Children.Add(new TextBlock
+        {
+            Text = "本项目以",
+            FontSize = 12.5,
+            Foreground = TextSecondary,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        licenseLine.Children.Add(MakeLinkText("MIT 协议", "https://github.com/refout/25DogMusic/blob/main/LICENSE"));
+        licenseLine.Children.Add(new TextBlock
+        {
+            Text = "开源，可自由使用、修改与分发，请保留版权与许可声明。",
+            FontSize = 12.5,
+            Foreground = TextSecondary,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        license.Children.Add(licenseLine);
+        body.Children.Add(license);
 
         return MakeSettingsCard(body);
     }
@@ -638,19 +660,39 @@ public partial class MainWindow : Window
         return stack;
     }
 
-    Button MakeLinkButton(string text, string url)
+    /// <summary>文本样式的超链接：带下划线，悬停变淡，点击打开系统浏览器。</summary>
+    Button MakeLinkText(string text, string url) => MakeLinkText(text, () => OpenExternal(url));
+
+    /// <summary>文本样式的可点击行内链接（用于「检查更新」这类动作），无按钮外观。</summary>
+    Button MakeLinkText(string text, Action action)
     {
-        var button = new Button
+        var link = new Button
         {
-            Content = text,
-            FontSize = 12.5,
-            Padding = new Thickness(14, 7),
-            CornerRadius = new CornerRadius(15),
-            Background = PillBg
+            Content = new TextBlock
+            {
+                Text = text,
+                FontSize = 12.5,
+                Foreground = AccentSoft,
+                TextDecorations = TextDecorations.Underline,
+                VerticalAlignment = VerticalAlignment.Center
+            },
+            Classes = { "link" },
+            VerticalAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(0)
         };
-        button.Click += (_, _) => OpenExternal(url);
-        return button;
+        link.PointerEntered += (_, _) => link.Opacity = 0.7;
+        link.PointerExited += (_, _) => link.Opacity = 1;
+        link.Click += (_, _) => action();
+        return link;
     }
+
+    TextBlock MakeLinkSeparator() => new()
+    {
+        Text = "·",
+        FontSize = 12.5,
+        Foreground = TextSecondary,
+        VerticalAlignment = VerticalAlignment.Center
+    };
 
     static void OpenExternal(string url)
     {
@@ -664,9 +706,14 @@ public partial class MainWindow : Window
         }
     }
 
-    async Task CheckForUpdatesAsync(TextBlock status, Button button)
+    bool _checkingUpdates;
+
+    async Task CheckForUpdatesAsync(TextBlock status)
     {
-        button.IsEnabled = false;
+        if (_checkingUpdates) return;
+
+        _checkingUpdates = true;
+        status.IsVisible = true;
         status.Text = "正在检查更新…";
 
         try
@@ -697,7 +744,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            button.IsEnabled = true;
+            _checkingUpdates = false;
         }
     }
 
