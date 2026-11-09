@@ -3374,7 +3374,7 @@ public partial class MainWindow : Window
         });
         section.Children.Add(header);
 
-        var strip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 2, 0, 0) };
+        var strip = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
         foreach (var track in _roamTracks)
         {
             strip.Children.Add(BuildRoamQueueCard(track, upcoming: false));
@@ -3384,12 +3384,7 @@ public partial class MainWindow : Window
             strip.Children.Add(BuildRoamQueueCard(item.Track, upcoming: true));
         }
 
-        section.Children.Add(new ScrollViewer
-        {
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-            Content = strip
-        });
+        section.Children.Add(strip);
 
         ContentPanel.Children.Add(section);
         _roamQueueSection = section;
@@ -3442,6 +3437,7 @@ public partial class MainWindow : Window
         {
             Width = 156,
             Padding = new Thickness(4),
+            Margin = new Thickness(0, 0, 12, 10),
             CornerRadius = new CornerRadius(12),
             Background = Brushes.Transparent,
             Cursor = new Cursor(StandardCursorType.Hand),
@@ -4025,7 +4021,7 @@ public partial class MainWindow : Window
 
         var card = new Border
         {
-            Height = 116,
+            Height = 176,
             CornerRadius = new CornerRadius(14),
             ClipToBounds = true,
             Background = CoverPlaceholder,

@@ -63,13 +63,21 @@
         </Transitions>
       </Setter>
     </Style>
+    <!-- 折叠按钮与搜索框同高（32px）并垂直对齐 -->
+    <Style Selector="Button#SidebarToggle">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,2,6" />
+    </Style>
     <!-- 侧栏折叠：只保留图标，文案、歌单区与搜索框隐藏 -->
     <Style Selector="Border#SidebarPane.collapsed">
       <Setter Property="Padding" Value="8,16" />
     </Style>
     <Style Selector="Border#SidebarPane.collapsed Button#SidebarToggle">
       <Setter Property="HorizontalAlignment" Value="Center" />
-      <Setter Property="Margin" Value="0,4,0,0" />
+      <Setter Property="Margin" Value="0,0,0,6" />
     </Style>
     <Style Selector="Border#SidebarPane.collapsed Button.nav">
       <Setter Property="Padding" Value="0,10" />
@@ -500,8 +508,7 @@
                 </Grid>
               </Border>
 
-              <Button x:Name="SidebarToggle" Classes="tool" Width="26" Height="26"
-                      HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,2,0" ToolTip.Tip="折叠侧栏">
+              <Button x:Name="SidebarToggle" Classes="tool" ToolTip.Tip="折叠侧栏">
                 <ic:SymbolIcon x:Name="SidebarToggleIcon" Symbol="ChevronLeft" FontSize="12"
                                Foreground="{DynamicResource TextSecondary}" />
               </Button>
