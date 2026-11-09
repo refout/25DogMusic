@@ -499,23 +499,11 @@ public partial class MainWindow : Window
         Grid.SetColumn(submitButton, 2);
         codeRow.Children.Add(submitButton);
 
-        TextBlock SectionHeading(string text) => new()
-        {
-            Text = text,
-            FontSize = 12.5,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = CardLabel,
-            Margin = new Thickness(0, 0, 0, 2)
-        };
-
         var passwordPane = new StackPanel { Spacing = 10 };
-        passwordPane.Children.Add(SectionHeading("账号密码登录"));
-        passwordPane.Children.Add(BuildField("服务器地址", serverBox));
         passwordPane.Children.Add(credentials);
         passwordPane.Children.Add(loginButton);
 
         var oauthPane = new StackPanel { Spacing = 10 };
-        oauthPane.Children.Add(SectionHeading("浏览器授权"));
         oauthPane.Children.Add(new TextBlock
         {
             Text = "点击后在浏览器登录飞牛 NAS，授权完成会自动返回并登录；若浏览器未自动返回，也可以把回跳地址或 code 粘贴到下方。",
@@ -526,28 +514,49 @@ public partial class MainWindow : Window
         oauthPane.Children.Add(oauthButton);
         oauthPane.Children.Add(codeRow);
 
-        var divider = new Border
-        {
-            Width = 1,
-            Background = Divider,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Margin = new Thickness(0, 2)
-        };
+        // 两种登录方式二选一：上方切换，下方只显示当前方式
+        var panes = new Control[] { passwordPane, oauthPane };
+        var paneHost = new StackPanel();
+        var methodRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var methodButtons = new Button[panes.Length];
 
-        var columns = new Grid
+        void Activate(int index)
         {
-            ColumnDefinitions = new ColumnDefinitions("*,1,*"),
-            ColumnSpacing = 22
-        };
-        columns.Children.Add(passwordPane);
-        Grid.SetColumn(divider, 1);
-        columns.Children.Add(divider);
-        Grid.SetColumn(oauthPane, 2);
-        columns.Children.Add(oauthPane);
+            for (var i = 0; i < panes.Length; i++)
+            {
+                if (i == index) methodButtons[i].Classes.Add("active");
+                else methodButtons[i].Classes.Remove("active");
+            }
+
+            paneHost.Children.Clear();
+            paneHost.Children.Add(panes[index]);
+        }
+
+        var methods = new[] { "账号密码登录", "浏览器授权" };
+        for (var i = 0; i < methods.Length; i++)
+        {
+            var index = i;
+            var button = new Button
+            {
+                Content = new TextBlock
+                {
+                    Text = methods[i],
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+            button.Classes.Add("searchtab");
+            button.Click += (_, _) => Activate(index);
+            methodButtons[i] = button;
+            methodRow.Children.Add(button);
+        }
+
+        Activate(0);
 
         var body = new StackPanel { Spacing = 16 };
         body.Children.Add(header);
-        body.Children.Add(columns);
+        body.Children.Add(methodRow);
+        body.Children.Add(BuildField("服务器地址", serverBox));
+        body.Children.Add(paneHost);
 
         return MakeSettingsCard(body);
     }

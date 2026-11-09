@@ -77,8 +77,6 @@ public partial class MainWindow : Window
     static readonly IBrush LDivider = new SolidColorBrush(Color.Parse("#14000000"));
     static readonly IBrush DSectionLabel = new SolidColorBrush(Color.Parse("#A8A8B0"));
     static readonly IBrush LSectionLabel = new SolidColorBrush(Color.Parse("#5C5C64"));
-    static readonly IBrush DCardLabel = new SolidColorBrush(Color.Parse("#C4C4CC"));
-    static readonly IBrush LCardLabel = new SolidColorBrush(Color.Parse("#44444C"));
     static readonly IBrush DSwatchBorder = new SolidColorBrush(Color.Parse("#26FFFFFF"));
     static readonly IBrush LSwatchBorder = new SolidColorBrush(Color.Parse("#33000000"));
     static readonly IBrush DEmptyIcon = new SolidColorBrush(Color.Parse("#4E4E58"));
@@ -115,7 +113,6 @@ public partial class MainWindow : Window
     IBrush RowActive => IsLight ? LRowActive : DRowActive;
     IBrush Divider => IsLight ? LDivider : DDivider;
     IBrush SectionLabel => IsLight ? LSectionLabel : DSectionLabel;
-    IBrush CardLabel => IsLight ? LCardLabel : DCardLabel;
     IBrush SwatchBorder => IsLight ? LSwatchBorder : DSwatchBorder;
     IBrush EmptyIcon => IsLight ? LEmptyIcon : DEmptyIcon;
     IBrush NoteStroke => IsLight ? LNoteStroke : DNoteStroke;
