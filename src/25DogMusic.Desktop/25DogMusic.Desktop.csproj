@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <!-- 发布的可执行文件统一命名为 25DogMusic（不影响项目目录名） -->
     <AssemblyName>25DogMusic</AssemblyName>
-    <Version>0.0.6</Version>
+    <Version>0.0.7</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
