@@ -3685,16 +3685,17 @@ public partial class MainWindow : Window
         var latest = latestTask.Result;
         var albums = albumsTask.Result;
 
-        // 顶部四个入口卡片：封面拼贴 + 标题，正方形并随宽度自适应
+        // 顶部四个入口卡片：封面堆叠 + 标题，高度固定、宽度随窗口自适应
         var shortcutCovers = new List<(string?, Image)>();
         var cards = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), ColumnSpacing = 12 };
 
-        var roamCard = BuildHomeShortcutCard("漫游", recent.Select(track => track.CoverId), LoadRoamAsync, shortcutCovers);
+        var roamCard = BuildHomeShortcutCard("漫游", "随机推荐", recent.Select(track => track.CoverId), LoadRoamAsync, shortcutCovers);
         Grid.SetColumn(roamCard, 0);
         cards.Children.Add(roamCard);
 
         var favoritesCard = BuildHomeShortcutCard(
             "收藏",
+            "我喜欢的歌曲",
             favorites.Select(track => track.CoverId)
                 .Concat(recent.Select(track => track.CoverId))
                 .Distinct(),
@@ -3703,28 +3704,16 @@ public partial class MainWindow : Window
         Grid.SetColumn(favoritesCard, 1);
         cards.Children.Add(favoritesCard);
 
-        var recentCard = BuildHomeShortcutCard("最近播放", recent.Select(track => track.CoverId), LoadHistoryAsync, shortcutCovers);
+        var recentCard = BuildHomeShortcutCard("最近播放", "继续收听", recent.Select(track => track.CoverId), LoadHistoryAsync, shortcutCovers);
         Grid.SetColumn(recentCard, 2);
         cards.Children.Add(recentCard);
 
         var latestCovers = latest.Select(track => track.CoverId).Concat(albums.Select(album => album.CoverId));
-        var latestCard = BuildHomeShortcutCard("最近添加", latestCovers, LoadAllTracksAsync, shortcutCovers);
+        var latestCard = BuildHomeShortcutCard("最近添加", "最新入库", latestCovers, LoadAllTracksAsync, shortcutCovers);
         Grid.SetColumn(latestCard, 3);
         cards.Children.Add(latestCard);
 
         ContentPanel.Children.Add(cards);
-
-        void FitSquareCards()
-        {
-            var width = (cards.Bounds.Width - 36) / 4;
-            if (width <= 0) return;
-            foreach (var child in cards.Children)
-            {
-                if (child is Border border) border.Height = width;
-            }
-        }
-        cards.SizeChanged += (_, _) => FitSquareCards();
-        Dispatcher.UIThread.Post(FitSquareCards, DispatcherPriority.Background);
 
         _ = LoadHomeCardCoversAsync(shortcutCovers);
 
@@ -3820,62 +3809,75 @@ public partial class MainWindow : Window
         return panel;
     }
 
-    Control BuildHomeShortcutCard(string title, IEnumerable<string?> coverIds, Func<Task> onClick, List<(string?, Image)> pending)
+    /// <summary>首页入口卡片：高度固定、宽度随窗口拉伸，封面以三张错位旋转的卡片叠放。</summary>
+    Control BuildHomeShortcutCard(string title, string subtitle, IEnumerable<string?> coverIds, Func<Task> onClick, List<(string?, Image)> pending)
     {
-        var covers = coverIds.Where(id => !string.IsNullOrWhiteSpace(id)).Take(4).ToList();
+        var covers = coverIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().Take(3).ToList();
 
-        var mosaic = new Grid
+        var stack = new Canvas { Width = 108, Height = 86, VerticalAlignment = VerticalAlignment.Center };
+        var layout = new (double Left, double Top, double Size, double Angle, double Opacity)[]
         {
-            ColumnDefinitions = new ColumnDefinitions("*,*"),
-            RowDefinitions = new RowDefinitions("*,*")
+            (2, 16, 54, -15, 0.7),
+            (26, 6, 56, -4, 0.88),
+            (50, 16, 60, 10, 1.0)
         };
 
-        for (var i = 0; i < 4; i++)
+        var index = 0;
+        foreach (var (left, top, size, angle, opacity) in layout)
         {
             var image = new Image { Stretch = Stretch.UniformToFill };
-            if (i < covers.Count)
-            {
-                pending.Add((covers[i], image));
-            }
+            if (index < covers.Count) pending.Add((covers[index], image));
+            index++;
 
-            var cell = new Border
+            var cover = new Border
             {
-                Background = CoverPlaceholder,
+                Width = size,
+                Height = size,
+                CornerRadius = new CornerRadius(8),
                 ClipToBounds = true,
-                Margin = new Thickness(1),
-                Child = image
+                Background = CoverPlaceholder,
+                Child = image,
+                Opacity = opacity,
+                RenderTransformOrigin = RelativePoint.Center,
+                RenderTransform = new RotateTransform(angle),
+                BoxShadow = BoxShadows.Parse("0 6 16 0 #59000000")
             };
-            Grid.SetColumn(cell, i % 2);
-            Grid.SetRow(cell, i / 2);
-            mosaic.Children.Add(cell);
+            Canvas.SetLeft(cover, left);
+            Canvas.SetTop(cover, top);
+            stack.Children.Add(cover);
         }
 
-        var label = new Border
+        var texts = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
+        texts.Children.Add(new TextBlock
         {
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Background = new SolidColorBrush(Colors.Black, 0.55),
-            Padding = new Thickness(10, 6),
-            Child = new TextBlock
-            {
-                Text = title,
-                FontSize = 13,
-                FontWeight = FontWeight.SemiBold,
-                Foreground = Brushes.White
-            }
-        };
+            Text = title,
+            FontSize = 15,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = TextPrimary,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        texts.Children.Add(new TextBlock
+        {
+            Text = subtitle,
+            FontSize = 12,
+            Foreground = TextSecondary,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
 
-        var content = new Grid();
-        content.Children.Add(mosaic);
-        content.Children.Add(label);
+        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 14 };
+        row.Children.Add(stack);
+        Grid.SetColumn(texts, 1);
+        row.Children.Add(texts);
 
         var card = new Border
         {
-            MinHeight = 96,
+            Height = 116,
+            Padding = new Thickness(10, 0, 14, 0),
             CornerRadius = new CornerRadius(14),
             ClipToBounds = true,
-            Background = CoverPlaceholder,
+            Background = CardBg,
             Cursor = new Cursor(StandardCursorType.Hand),
-            Child = content,
+            Child = row,
             RenderTransform = new TranslateTransform(0, 0),
             Transitions = new Transitions
             {
@@ -3890,9 +3892,8 @@ public partial class MainWindow : Window
 
         card.PointerEntered += (_, _) =>
         {
-            card.RenderTransform = new TranslateTransform(0, -5);
+            card.RenderTransform = new TranslateTransform(0, -4);
             card.BoxShadow = BoxShadows.Parse("0 12 26 0 #4D000000");
-            card.Opacity = 1.0;
         };
         card.PointerExited += (_, _) =>
         {
