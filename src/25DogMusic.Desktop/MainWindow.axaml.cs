@@ -185,6 +185,7 @@ public partial class MainWindow : Window
     bool _roamPrefetching;
     Control? _roamQueueSection;
     ScrollViewer? _roamQueueScroll;
+    Control? _homePage;
 
     // 歌单「添加歌曲」侧边抽屉
     Playlist? _pickerPlaylist;
@@ -265,6 +266,7 @@ public partial class MainWindow : Window
             UpdateSearchListHeight();
             UpdateSplitHeight();
             UpdateRoamQueueHeight();
+            UpdateHomePageHeight();
         };
 
         NavHome.Click += async (_, _) => await LoadHomeAsync();
@@ -2176,8 +2178,9 @@ public partial class MainWindow : Window
         ContentPanel.Children.Clear();
         ListHeader.Children.Clear();
         ListRows.Children.Clear();
-        // 离开漫游页后恢复页面滚动（漫游页会临时禁用外层滚动）
+        // 离开首页/漫游页后恢复页面滚动（这些页面会临时禁用外层滚动）
         ContentScroll.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
+        _homePage = null;
         _rowImages.Clear();
         _rowBorders.Clear();
         _heartIcons.Clear();
@@ -3212,7 +3215,9 @@ public partial class MainWindow : Window
             Text = "为你漫游",
             FontSize = 11.5,
             FontWeight = FontWeight.SemiBold,
-            Foreground = AccentSoft
+            Foreground = AccentSoft,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            TextAlignment = TextAlignment.Left
         };
 
         var title = new TextBlock
@@ -3222,7 +3227,9 @@ public partial class MainWindow : Window
             FontWeight = FontWeight.Bold,
             Foreground = TextPrimary,
             TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 540
+            MaxWidth = 540,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            TextAlignment = TextAlignment.Left
         };
         _roamTitle = title;
 
@@ -3233,7 +3240,9 @@ public partial class MainWindow : Window
                 : $"{track.Artist} · {track.AlbumName}",
             FontSize = 13,
             Foreground = TextSecondary,
-            TextWrapping = TextWrapping.Wrap
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            TextAlignment = TextAlignment.Left
         };
         _roamSub = sub;
 
@@ -3241,7 +3250,9 @@ public partial class MainWindow : Window
         {
             Text = $"时长 {FormatDuration(track.DurationMs)}",
             FontSize = 11.5,
-            Foreground = TextMuted
+            Foreground = TextMuted,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            TextAlignment = TextAlignment.Left
         };
         _roamMeta = meta;
 
@@ -3269,6 +3280,7 @@ public partial class MainWindow : Window
         {
             Spacing = 6,
             VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left,
             Margin = new Thickness(30, 0, 0, 0)
         };
         textStack.Children.Add(eyebrow);
@@ -3856,8 +3868,6 @@ public partial class MainWindow : Window
         Grid.SetColumn(latestCard, 3);
         cards.Children.Add(latestCard);
 
-        ContentPanel.Children.Add(cards);
-
         _ = LoadHomeCardCoversAsync(shortcutCovers);
 
         // 下方分节改为 Tab：最近播放 / 最近添加歌曲 / 最近添加专辑
@@ -3888,57 +3898,87 @@ public partial class MainWindow : Window
 
         if (definitions.Count == 0)
         {
+            ContentPanel.Children.Add(cards);
             AddEmptyState("欢迎使用 25DogMusic", "去「音乐库」挑一首歌开始播放吧", Symbol.MusicNote2);
+            StatusText.Text = "首页";
+            return;
         }
-        else
+
+        var tabRow = new StackPanel
         {
-            var tabRow = new StackPanel
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Margin = new Thickness(0, 18, 0, 4)
+        };
+
+        var host = new StackPanel();
+
+        // 顶部卡片与 Tab 固定，只有列表区域滚动
+        var headerArea = new StackPanel();
+        headerArea.Children.Add(cards);
+        headerArea.Children.Add(tabRow);
+
+        var listScroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Margin = new Thickness(0, 4, 0, 0),
+            Content = host
+        };
+
+        var page = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
+        page.Children.Add(headerArea);
+        Grid.SetRow(listScroll, 1);
+        page.Children.Add(listScroll);
+
+        ContentPanel.Children.Add(page);
+        // 首页固定为视口高度并由列表区滚动，避免整页滚动
+        _homePage = page;
+        ContentScroll.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
+        UpdateHomePageHeight();
+
+        var buttons = new Button[definitions.Count];
+        var contents = new Control?[definitions.Count];
+
+        void Activate(int index)
+        {
+            for (var i = 0; i < buttons.Length; i++)
             {
-                Orientation = Orientation.Horizontal,
-                Spacing = 8,
-                Margin = new Thickness(0, 18, 0, 4)
-            };
-            ContentPanel.Children.Add(tabRow);
-
-            var host = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
-            ContentPanel.Children.Add(host);
-
-            var buttons = new Button[definitions.Count];
-            var contents = new Control?[definitions.Count];
-
-            void Activate(int index)
-            {
-                for (var i = 0; i < buttons.Length; i++)
-                {
-                    if (i == index) buttons[i].Classes.Add("active");
-                    else buttons[i].Classes.Remove("active");
-                }
-                host.Children.Clear();
-                contents[index] ??= definitions[index].Build();
-                host.Children.Add(contents[index]!);
+                if (i == index) buttons[i].Classes.Add("active");
+                else buttons[i].Classes.Remove("active");
             }
-
-            for (var i = 0; i < definitions.Count; i++)
-            {
-                var index = i;
-                var button = new Button
-                {
-                    Content = new TextBlock
-                    {
-                        Text = definitions[i].Label,
-                        VerticalAlignment = VerticalAlignment.Center
-                    }
-                };
-                button.Classes.Add("searchtab");
-                button.Click += (_, _) => Activate(index);
-                buttons[i] = button;
-                tabRow.Children.Add(button);
-            }
-
-            Activate(0);
+            host.Children.Clear();
+            contents[index] ??= definitions[index].Build();
+            host.Children.Add(contents[index]!);
         }
+
+        for (var i = 0; i < definitions.Count; i++)
+        {
+            var index = i;
+            var button = new Button
+            {
+                Content = new TextBlock
+                {
+                    Text = definitions[i].Label,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+            button.Classes.Add("searchtab");
+            button.Click += (_, _) => Activate(index);
+            buttons[i] = button;
+            tabRow.Children.Add(button);
+        }
+
+        Activate(0);
 
         StatusText.Text = "首页";
+    }
+
+    /// <summary>首页高度取视口高度，使顶部固定、仅列表区域滚动。</summary>
+    void UpdateHomePageHeight()
+    {
+        if (_homePage is null) return;
+        _homePage.Height = ContentScroll.Bounds.Height;
     }
 
     Control BuildTrackTab(List<Track> tracks)
