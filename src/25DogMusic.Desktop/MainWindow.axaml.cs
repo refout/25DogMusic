@@ -3384,7 +3384,14 @@ public partial class MainWindow : Window
             strip.Children.Add(BuildRoamQueueCard(item.Track, upcoming: true));
         }
 
-        section.Children.Add(strip);
+        // 队列独立滚动：多行自动换行，超出高度时只滚动队列区域，不把整页撑长
+        section.Children.Add(new ScrollViewer
+        {
+            MaxHeight = 360,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Content = strip
+        });
 
         ContentPanel.Children.Add(section);
         _roamQueueSection = section;
