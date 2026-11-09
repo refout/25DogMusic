@@ -51,6 +51,7 @@ public sealed class CoverView : View
     void Paint(DRect bounds)
     {
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
+        if (Application.Driver is not { } driver) return;
 
         var origin = ViewportToScreen(new System.Drawing.Point(0, 0));
 
@@ -58,9 +59,9 @@ public sealed class CoverView : View
         for (var row = 0; row < bounds.Height; row++)
         {
             var backdrop = Wallpaper.Shared.Blend(origin.X, origin.Y + row, Theme, 0f);
-            Application.Driver.SetAttribute(new Terminal.Gui.Attribute(backdrop, backdrop));
-            Application.Driver.Move(origin.X, origin.Y + row);
-            Application.Driver.AddStr(new string(' ', bounds.Width));
+            driver.SetAttribute(new Terminal.Gui.Attribute(backdrop, backdrop));
+            driver.Move(origin.X, origin.Y + row);
+            driver.AddStr(new string(' ', bounds.Width));
         }
 
         if (_image is null) return;
@@ -85,9 +86,9 @@ public sealed class CoverView : View
                 var fg = Scale(_buffer, top, 1f);
                 var bg = Scale(_buffer, bottom, 1f);
 
-                Application.Driver.SetAttribute(new Terminal.Gui.Attribute(fg, bg));
-                Application.Driver.Move(origin.X + padLeft + col, origin.Y + padTop + row);
-                Application.Driver.AddRune('▀');
+                driver.SetAttribute(new Terminal.Gui.Attribute(fg, bg));
+                driver.Move(origin.X + padLeft + col, origin.Y + padTop + row);
+                driver.AddRune('▀');
             }
         }
     }
@@ -107,21 +108,7 @@ public sealed class CoverView : View
         if (_buffer is not null && _bufferWidth == width && _bufferHeight == height) return;
 
         var resized = _image.Resize(width, height);
-
-        var buffer = new byte[width * height * 3];
-        var index = 0;
-        for (var y = 0; y < height; y++)
-        {
-            for (var x = 0; x < width; x++)
-            {
-                var pixel = resized[x, y];
-                buffer[index++] = pixel.R;
-                buffer[index++] = pixel.G;
-                buffer[index++] = pixel.B;
-            }
-        }
-
-        _buffer = buffer;
+        _buffer = resized.ToRgb();
         _bufferWidth = width;
         _bufferHeight = height;
     }

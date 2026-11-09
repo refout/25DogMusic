@@ -2,12 +2,16 @@ using System.Text.Json;
 
 namespace FnMusic.Api;
 
+/// <summary>专辑条目。</summary>
 public sealed record Album(string Guid, string Name, string Artist, int TrackCount, string CoverId);
 
+/// <summary>歌手条目。</summary>
 public sealed record Artist(string Guid, string Name, int TrackCount, int AlbumCount, string CoverId);
 
+/// <summary>风格条目。</summary>
 public sealed record Genre(string Guid, string Name, int TrackCount);
 
+/// <summary>歌单条目。</summary>
 public sealed record Playlist(string Guid, string Name, int TrackCount, string CoverId);
 
 /// <summary>共享库（音乐根目录）。</summary>
@@ -19,6 +23,7 @@ public sealed record FolderEntry(string Name, string Path, int ItemCount);
 /// <summary>文件夹视图内容：当前文件夹的子目录与歌曲。</summary>
 public sealed record FolderContent(string Name, string Path, int ItemCount, List<FolderEntry> Folders, List<Track> Tracks);
 
+/// <summary>歌曲条目，音质相关字段在服务端未提供时保持默认值。</summary>
 public sealed record Track(
     string Guid,
     string Title,
@@ -247,11 +252,23 @@ public static class Library
     }
 
     public static string GetString(JsonElement item, string name)
-        => item.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String ? el.GetString() ?? string.Empty : string.Empty;
+        => item.ValueKind == JsonValueKind.Object
+           && item.TryGetProperty(name, out var el)
+           && el.ValueKind == JsonValueKind.String
+            ? el.GetString() ?? string.Empty
+            : string.Empty;
 
     public static int GetInt(JsonElement item, string name)
-        => item.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Number ? el.GetInt32() : 0;
+        => item.ValueKind == JsonValueKind.Object
+           && item.TryGetProperty(name, out var el)
+           && el.ValueKind == JsonValueKind.Number
+            ? el.GetInt32()
+            : 0;
 
     public static long GetLong(JsonElement item, string name)
-        => item.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Number ? el.GetInt64() : 0;
+        => item.ValueKind == JsonValueKind.Object
+           && item.TryGetProperty(name, out var el)
+           && el.ValueKind == JsonValueKind.Number
+            ? el.GetInt64()
+            : 0;
 }

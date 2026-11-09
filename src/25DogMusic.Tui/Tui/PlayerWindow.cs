@@ -7,6 +7,7 @@ using FnMusic.Playback;
 
 namespace FnMusic.Tui;
 
+/// <summary>终端版主窗口：浏览、搜索、播放与歌词集中在同一个终端界面。</summary>
 public sealed class PlayerWindow : Window
 {
     readonly AppConfig _cfg;
@@ -31,7 +32,7 @@ public sealed class PlayerWindow : Window
     readonly TransparentView _content;
 
     /// <summary>四边统一内边距（字符列/行）。</summary>
-    const int Margin = 1;
+    const int EdgePadding = 1;
 
     readonly List<string> _navItems = new() { "全部歌曲", "专辑", "歌手", "流派", "历史" };
 
@@ -180,10 +181,10 @@ public sealed class PlayerWindow : Window
 
         _content = new TransparentView
         {
-            X = Margin,
-            Y = Margin,
-            Width = Dim.Fill(Margin * 2),
-            Height = Dim.Fill(Margin * 2)
+            X = EdgePadding,
+            Y = EdgePadding,
+            Width = Dim.Fill(EdgePadding * 2),
+            Height = Dim.Fill(EdgePadding * 2)
         };
         _content.Add(_header, _loginFrame, _nav, _list, _spectrum, _lyrics, _searchField, _status);
         Add(_content);

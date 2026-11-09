@@ -46,6 +46,19 @@ public sealed class RgbaImage
         }
     }
 
+    /// <summary>转成行优先的 RGB 字节（去掉 alpha），供终端配色使用。</summary>
+    public byte[] ToRgb()
+    {
+        var rgb = new byte[Width * Height * 3];
+        for (int source = 0, target = 0; source < Data.Length; source += 4, target += 3)
+        {
+            rgb[target] = Data[source];
+            rgb[target + 1] = Data[source + 1];
+            rgb[target + 2] = Data[source + 2];
+        }
+        return rgb;
+    }
+
     /// <summary>双线性缩放到指定尺寸；终端按字符格显示，不需要更高质量的重采样。</summary>
     public RgbaImage Resize(int width, int height)
     {

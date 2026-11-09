@@ -28,7 +28,7 @@
 | 运行时 | .NET 10 |
 | 音频 | LibVLCSharp + VideoLAN LibVLC、NAudio |
 | 图标 | FluentIcons.Avalonia |
-| 终端版 | Terminal.Gui 2.0（`25DogMusic.Tui`，实验性） |
+| 终端版 | Terminal.Gui 2.0 + StbImageSharp（`25DogMusic.Tui`，实验性） |
 
 ## 目录结构
 
@@ -40,6 +40,7 @@
     ├── 25DogMusic.slnx
     ├── 25DogMusic.Core/       # API 客户端、配置、歌词解析
     ├── 25DogMusic.Desktop/    # Avalonia 桌面客户端
+    ├── 25DogMusic.Tests/      # 核心逻辑单元测试（xUnit）
     └── 25DogMusic.Tui/        # 终端界面（实验性）
 ```
 
@@ -51,6 +52,9 @@
 # 还原与构建
 dotnet build src/25DogMusic.slnx
 
+# 运行单元测试
+dotnet test src/25DogMusic.slnx
+
 # 启动桌面客户端
 dotnet run --project src/25DogMusic.Desktop
 ```
@@ -61,7 +65,7 @@ dotnet run --project src/25DogMusic.Desktop
 
 ## 构建与发布
 
-- **CI**：推送到 `main` 或提交 PR 时自动还原并构建 Release（`.github/workflows/ci.yml`）。
+- **CI**：推送到 `main` 或提交 PR 时自动还原、构建 Release 并运行单元测试（`.github/workflows/ci.yml`）。
 - **打包**：推送 `v*` 标签触发 NativeAOT 发布并创建 GitHub Release（`.github/workflows/release.yml`），版本号由标签注入，显示在「关于」页：
   - Windows：`25DogMusic-<版本>-win-x64.zip` 与 `25DogMusic-<版本>-windows-x64-setup.exe` 安装包
   - Linux：`25DogMusic-<版本>-linux-x64.tar.gz`（内置 libvlc，启动脚本 `25DogMusic.sh`）

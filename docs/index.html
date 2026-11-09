@@ -252,6 +252,9 @@
         <div class="code"><span class="c"># 还原并构建解决方案</span>
 <span class="k">dotnet</span> build src/25DogMusic.slnx
 
+<span class="c"># 运行核心逻辑单元测试</span>
+<span class="k">dotnet</span> test src/25DogMusic.slnx
+
 <span class="c"># 启动桌面客户端</span>
 <span class="k">dotnet</span> run --project src/25DogMusic.Desktop
 
@@ -262,7 +265,7 @@
   -p:PublishAot=true -o publish/win-x64</div>
         <div>
           <p style="color:var(--muted);margin-top:0">
-            每次推送到 <code>main</code> 会自动构建；推送 <code>v*</code> 标签则会触发 AOT 发布并创建 GitHub Release，
+            每次推送到 <code>main</code> 会自动构建并运行单元测试；推送 <code>v*</code> 标签则会触发 AOT 发布并创建 GitHub Release，
             同时产出 Windows zip / 安装包、Linux tar.gz 与 macOS zip。版本号由标签注入，显示在「关于」页。
           </p>
           <p style="color:var(--muted)">

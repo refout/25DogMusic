@@ -31,19 +31,7 @@ public sealed class Wallpaper
         }
 
         var resized = image.Resize(width, height);
-
-        var cells = new byte[width * height * 3];
-        var index = 0;
-        for (var y = 0; y < height; y++)
-        {
-            for (var x = 0; x < width; x++)
-            {
-                var pixel = resized[x, y];
-                cells[index++] = pixel.R;
-                cells[index++] = pixel.G;
-                cells[index++] = pixel.B;
-            }
-        }
+        var cells = resized.ToRgb();
 
         Blur(cells, width, height, 2);
         Blur(cells, width, height, 2);

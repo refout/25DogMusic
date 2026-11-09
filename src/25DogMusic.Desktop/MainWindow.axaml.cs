@@ -26,6 +26,10 @@ using FluentIcons.Common;
 
 namespace _25DogMusic.Desktop;
 
+/// <summary>
+/// 主窗口：负责导航、列表分页、播放控制、全屏播放页与设置页。
+/// 界面按页面动态构建，切页时会清理上一页的控件引用以配合 GC。
+/// </summary>
 public partial class MainWindow : Window
 {
     static readonly IBrush DTextPrimary = new SolidColorBrush(Color.Parse("#F2F2F5"));

@@ -37,6 +37,9 @@ public sealed class AudioLevelMonitor : IDisposable
 
         try
         {
+            // WASAPI 回环只在 Windows 可用，其他平台保持 Available=false
+            if (!OperatingSystem.IsWindows()) return;
+
             _capture = new WasapiLoopbackCapture();
             _capture.DataAvailable += OnData;
             _capture.StartRecording();
@@ -58,6 +61,8 @@ public sealed class AudioLevelMonitor : IDisposable
 
     void OnData(object? sender, WaveInEventArgs e)
     {
+        if (!OperatingSystem.IsWindows()) return;
+
         var format = _capture?.WaveFormat;
         if (format is null || e.BytesRecorded <= 0) return;
 
@@ -169,7 +174,7 @@ public sealed class AudioLevelMonitor : IDisposable
 
     public void Dispose()
     {
-        if (_capture is null) return;
+        if (!OperatingSystem.IsWindows() || _capture is null) return;
 
         try
         {

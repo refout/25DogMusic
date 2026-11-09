@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace FnMusic.Api;
 
+/// <summary>一行歌词与其起始时间。</summary>
 public sealed record LyricLine(TimeSpan Time, string Text);
 
 /// <summary>解析 LRC 歌词（[mm:ss.xx] 行首时间戳）。</summary>
