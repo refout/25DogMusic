@@ -63,6 +63,36 @@
         </Transitions>
       </Setter>
     </Style>
+    <!-- 侧栏折叠：只保留图标，文案、歌单区与搜索框隐藏 -->
+    <Style Selector="Border#SidebarPane.collapsed">
+      <Setter Property="Padding" Value="8,16" />
+    </Style>
+    <Style Selector="Border#SidebarPane.collapsed Button#SidebarToggle">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+    <Style Selector="Border#SidebarPane.collapsed Button.nav">
+      <Setter Property="Padding" Value="0,10" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border#SidebarPane.collapsed Button.nav StackPanel">
+      <Setter Property="Spacing" Value="0" />
+    </Style>
+    <Style Selector="Border#SidebarPane.collapsed Button.nav TextBlock">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Border#SidebarPane.collapsed Grid#PlaylistSection">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Border#SidebarPane.collapsed StackPanel#SidebarPlaylists">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Border#SidebarPane.collapsed Border#PlaylistCreateBar">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Border#SidebarPane.collapsed TextBlock#StatusText">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
     <Style Selector="Button.nav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource NavHover}" />
     </Style>
@@ -453,81 +483,89 @@
     </Border>
 
     <Grid RowDefinitions="*,Auto">
-      <Grid Grid.Row="0" ColumnDefinitions="248,*">
+      <Grid x:Name="SidebarRoot" Grid.Row="0" ColumnDefinitions="248,*">
         <Border x:Name="SidebarPane" Grid.Column="0" Background="{DynamicResource SidebarBg}" BorderBrush="{DynamicResource SidebarBorder}"
                 BorderThickness="1" CornerRadius="14" Padding="16,20" Margin="10,10,6,10">
           <Grid RowDefinitions="Auto,*,Auto">
-            <Border Grid.Row="0" Background="Transparent"
-                    BorderThickness="0" CornerRadius="9" Padding="10,7" Margin="0,0,0,6">
-              <Grid ColumnDefinitions="Auto,*">
-                <ic:SymbolIcon Symbol="Search" FontSize="14" Foreground="{DynamicResource TextMuted}"
-                               VerticalAlignment="Center" />
-                <TextBox x:Name="SearchBox" Grid.Column="1" Background="Transparent" BorderThickness="0"
-                         Foreground="{DynamicResource TextPrimary}"
-                         PlaceholderText="搜索歌曲、专辑、歌手" FontSize="13" Margin="8,0,0,0"
-                         VerticalAlignment="Center" VerticalContentAlignment="Center" />
-              </Grid>
-            </Border>
+            <Grid Grid.Row="0">
+              <Border x:Name="SearchPane" Background="Transparent"
+                      BorderThickness="0" CornerRadius="9" Padding="10,7,32,7" Margin="0,0,0,6">
+                <Grid ColumnDefinitions="Auto,*">
+                  <ic:SymbolIcon Symbol="Search" FontSize="14" Foreground="{DynamicResource TextMuted}"
+                                 VerticalAlignment="Center" />
+                  <TextBox x:Name="SearchBox" Grid.Column="1" Background="Transparent" BorderThickness="0"
+                           Foreground="{DynamicResource TextPrimary}"
+                           PlaceholderText="搜索歌曲、专辑" FontSize="13" Margin="8,0,0,0"
+                           VerticalAlignment="Center" VerticalContentAlignment="Center" />
+                </Grid>
+              </Border>
+
+              <Button x:Name="SidebarToggle" Classes="tool" Width="26" Height="26"
+                      HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,2,0" ToolTip.Tip="折叠侧栏">
+                <ic:SymbolIcon x:Name="SidebarToggleIcon" Symbol="ChevronLeft" FontSize="12"
+                               Foreground="{DynamicResource TextSecondary}" />
+              </Button>
+            </Grid>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
               <StackPanel Spacing="2">
-                <Button x:Name="NavHome" Classes="nav">
+                <Button x:Name="NavHome" Classes="nav" ToolTip.Tip="首页">
                   <StackPanel Orientation="Horizontal" Spacing="12">
                     <ic:SymbolIcon Symbol="Home" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                     <TextBlock Text="首页" FontSize="13.5" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
 
-                <Button x:Name="NavFavorites" Classes="nav">
+                <Button x:Name="NavFavorites" Classes="nav" ToolTip.Tip="收藏">
                   <StackPanel Orientation="Horizontal" Spacing="12">
                     <ic:SymbolIcon Symbol="Heart" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                     <TextBlock Text="收藏" FontSize="13.5" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
 
-                <Button x:Name="NavRecent" Classes="nav">
+                <Button x:Name="NavRecent" Classes="nav" ToolTip.Tip="最近">
                   <StackPanel Orientation="Horizontal" Spacing="12">
                     <ic:SymbolIcon Symbol="Clock" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                     <TextBlock Text="最近" FontSize="13.5" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
 
-                <Button x:Name="NavAlbums" Classes="nav">
+                <Button x:Name="NavAlbums" Classes="nav" ToolTip.Tip="专辑">
                   <StackPanel Orientation="Horizontal" Spacing="12">
                     <ic:SymbolIcon Symbol="Album" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                     <TextBlock Text="专辑" FontSize="13.5" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
 
-                <Button x:Name="NavArtists" Classes="nav">
+                <Button x:Name="NavArtists" Classes="nav" ToolTip.Tip="歌手">
                   <StackPanel Orientation="Horizontal" Spacing="12">
                     <ic:SymbolIcon Symbol="Person" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                     <TextBlock Text="歌手" FontSize="13.5" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
 
-                <Button x:Name="NavGenres" Classes="nav">
+                <Button x:Name="NavGenres" Classes="nav" ToolTip.Tip="风格">
                   <StackPanel Orientation="Horizontal" Spacing="12">
                     <ic:SymbolIcon Symbol="Grid" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                     <TextBlock Text="风格" FontSize="13.5" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
 
-                <Button x:Name="NavLibrary" Classes="nav">
+                <Button x:Name="NavLibrary" Classes="nav" ToolTip.Tip="音乐库">
                   <StackPanel Orientation="Horizontal" Spacing="12">
                     <ic:SymbolIcon Symbol="Library" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                     <TextBlock Text="音乐库" FontSize="13.5" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
 
-                <Button x:Name="NavFolders" Classes="nav">
+                <Button x:Name="NavFolders" Classes="nav" ToolTip.Tip="文件夹">
                   <StackPanel Orientation="Horizontal" Spacing="12">
                     <ic:SymbolIcon Symbol="Folder" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                     <TextBlock Text="文件夹" FontSize="13.5" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
 
-                <Grid ColumnDefinitions="*,Auto" Margin="0,14,0,0">
+                <Grid x:Name="PlaylistSection" ColumnDefinitions="*,Auto" Margin="0,14,0,0">
                   <TextBlock Text="歌单" Classes="navlabel" Margin="12,6,0,4" VerticalAlignment="Center" />
                   <Button x:Name="PlaylistAddButton" Grid.Column="1" Classes="tool" Width="24" Height="24"
                           Margin="0,0,6,0" ToolTip.Tip="新建歌单">
@@ -550,7 +588,7 @@
             </ScrollViewer>
 
             <StackPanel Grid.Row="2" Spacing="2" Margin="0,8,0,0">
-              <Button x:Name="NavSettings" Classes="nav">
+              <Button x:Name="NavSettings" Classes="nav" ToolTip.Tip="设置">
                 <StackPanel Orientation="Horizontal" Spacing="12">
                   <ic:SymbolIcon Symbol="Settings" Classes="navicon" FontSize="17" VerticalAlignment="Center" />
                   <TextBlock Text="设置" FontSize="13.5" VerticalAlignment="Center" />

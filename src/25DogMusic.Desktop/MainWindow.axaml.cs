@@ -274,6 +274,8 @@ public partial class MainWindow : Window
         NavLibrary.Click += async (_, _) => await LoadAllTracksAsync();
         NavFolders.Click += (_, _) => ShowFoldersPage();
         NavSettings.Click += (_, _) => ShowSettingsPage();
+        SidebarToggle.Click += (_, _) => SetSidebarCollapsed(!_sidebarCollapsed);
+        SetSidebarCollapsed(_config.SidebarCollapsed, save: false);
 
         PlaylistAddButton.Click += (_, _) =>
         {
@@ -419,6 +421,24 @@ public partial class MainWindow : Window
     // ---- 登录 / 客户端 ----
 
     int _settingsTab;
+
+    bool _sidebarCollapsed;
+
+    /// <summary>折叠侧栏：只保留图标，歌单区与搜索框隐藏，状态写入配置。</summary>
+    void SetSidebarCollapsed(bool collapsed, bool save = true)
+    {
+        _sidebarCollapsed = collapsed;
+
+        SidebarRoot.ColumnDefinitions = new ColumnDefinitions(collapsed ? "72,*" : "248,*");
+        SearchPane.IsVisible = !collapsed;
+        SidebarPane.Classes.Set("collapsed", collapsed);
+        SidebarToggleIcon.Symbol = collapsed ? Symbol.ChevronRight : Symbol.ChevronLeft;
+        ToolTip.SetTip(SidebarToggle, collapsed ? "展开侧栏" : "折叠侧栏");
+
+        if (!save) return;
+        _config.SidebarCollapsed = collapsed;
+        _config.Save();
+    }
 
     void ShowSettingsPage(string? message = null)
     {

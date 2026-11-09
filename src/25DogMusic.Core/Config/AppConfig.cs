@@ -28,6 +28,9 @@ public sealed class AppConfig
     public bool DesktopLyrics { get; set; }
     public bool SpectrumEnabled { get; set; } = true;
 
+    /// <summary>侧边栏是否折叠为仅图标模式。</summary>
+    public bool SidebarCollapsed { get; set; }
+
     static string ConfigDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "25DogMusic");
 
