@@ -184,6 +184,7 @@ public partial class MainWindow : Window
     string? _roamPrefetchCursor;
     bool _roamPrefetching;
     Control? _roamQueueSection;
+    ScrollViewer? _roamQueueScroll;
 
     // 歌单「添加歌曲」侧边抽屉
     Playlist? _pickerPlaylist;
@@ -263,6 +264,7 @@ public partial class MainWindow : Window
         {
             UpdateSearchListHeight();
             UpdateSplitHeight();
+            UpdateRoamQueueHeight();
         };
 
         NavHome.Click += async (_, _) => await LoadHomeAsync();
@@ -2174,6 +2176,8 @@ public partial class MainWindow : Window
         ContentPanel.Children.Clear();
         ListHeader.Children.Clear();
         ListRows.Children.Clear();
+        // 离开漫游页后恢复页面滚动（漫游页会临时禁用外层滚动）
+        ContentScroll.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
         _rowImages.Clear();
         _rowBorders.Clear();
         _heartIcons.Clear();
@@ -3134,10 +3138,11 @@ public partial class MainWindow : Window
         _mode = Mode.Roam;
         SetActiveNav(NavHome);
 
-        // 已经在漫游中：只重新展示当前推荐，不重新发起漫游、不打断当前播放
+        // 漫游页由队列区域自行滚动，禁用页面滚动避免出现双层滚动条
         if (_roaming && _roamId is not null && _currentTrack is not null)
         {
             BeginPage("漫游", "根据收藏与播放记录持续推荐");
+            ContentScroll.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
             _roamQueueSection = null;
             if (!_roamTracks.Any(track => track.Guid == _currentTrack.Guid)) _roamTracks.Add(_currentTrack);
             BuildRoamHero(_currentTrack);
@@ -3147,6 +3152,7 @@ public partial class MainWindow : Window
         }
 
         BeginPage("漫游", "根据收藏与播放记录持续推荐");
+        ContentScroll.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
 
         try
         {
@@ -3351,6 +3357,7 @@ public partial class MainWindow : Window
             oldParent.Children.Remove(_roamQueueSection);
         }
         _roamQueueSection = null;
+        _roamQueueScroll = null;
 
         if (_roamTracks.Count == 0 && _roamUpcoming.Count == 0) return;
 
@@ -3384,17 +3391,35 @@ public partial class MainWindow : Window
             strip.Children.Add(BuildRoamQueueCard(item.Track, upcoming: true));
         }
 
-        // 队列独立滚动：多行自动换行，超出高度时只滚动队列区域，不把整页撑长
-        section.Children.Add(new ScrollViewer
+        // 队列独立滚动：多行自动换行，高度按当前视口剩余空间计算，避免和页面滚动条叠加
+        var queueScroll = new ScrollViewer
         {
-            MaxHeight = 360,
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             Content = strip
-        });
+        };
+        section.Children.Add(queueScroll);
+        _roamQueueScroll = queueScroll;
 
         ContentPanel.Children.Add(section);
         _roamQueueSection = section;
+        Dispatcher.UIThread.Post(UpdateRoamQueueHeight, DispatcherPriority.Background);
+    }
+
+    /// <summary>让漫游队列占据页面剩余高度，避免页面与队列同时出现滚动条。</summary>
+    void UpdateRoamQueueHeight()
+    {
+        var scroll = _roamQueueScroll;
+        if (scroll?.Parent?.Parent is null) return;
+
+        var top = scroll.TranslatePoint(new Point(0, 0), ContentScroll);
+        if (top is null) return;
+
+        // TranslatePoint 返回的是视口坐标，加上滚动偏移换回内容坐标
+        var contentTop = top.Value.Y + ContentScroll.Offset.Y;
+        var available = ContentScroll.Bounds.Height - contentTop - 12;
+        // 队列至少保留 160 高；页面内容本身确实放不下时仍由外层滚动
+        scroll.MaxHeight = Math.Max(160, available);
     }
 
     Control BuildRoamQueueCard(Track track, bool upcoming)
