@@ -496,7 +496,44 @@ public partial class MainWindow : Window
 
     Control BuildAboutCard()
     {
-        var body = new StackPanel { Spacing = 16, Width = 620 };
+        var body = new StackPanel { Spacing = 18, Width = 620 };
+
+        // 应用图标 + 名称 / 版本
+        var logo = new Image { Width = 64, Height = 64, Stretch = Stretch.Uniform };
+        try
+        {
+            logo.Source = new Bitmap(AssetLoader.Open(new Uri("avares://25DogMusic/Assets/appicon.ico")));
+        }
+        catch
+        {
+            logo.IsVisible = false;
+        }
+
+        var title = new TextBlock
+        {
+            Text = "25DogMusic",
+            FontSize = 20,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = TextPrimary
+        };
+        var subtitle = new TextBlock
+        {
+            Text = $"飞牛 NAS 音乐客户端 · 版本 {AppVersionText}",
+            FontSize = 12.5,
+            Foreground = TextSecondary,
+            Margin = new Thickness(0, 2, 0, 0)
+        };
+        var titleStack = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        titleStack.Children.Add(title);
+        titleStack.Children.Add(subtitle);
+
+        var header = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 14,
+            Children = { logo, titleStack }
+        };
+        body.Children.Add(header);
 
         body.Children.Add(new TextBlock
         {
@@ -549,12 +586,56 @@ public partial class MainWindow : Window
         checkButton.Click += async (_, _) => await CheckForUpdatesAsync(status, checkButton);
 
         var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-        links.Children.Add(MakeLinkButton("项目主页", "https://github.com/refout/25DogMusic"));
+        links.Children.Add(MakeLinkButton("项目主页", "https://refout.github.io/25DogMusic/"));
         links.Children.Add(MakeLinkButton("下载页面", "https://github.com/refout/25DogMusic/releases"));
         links.Children.Add(MakeLinkButton("问题反馈", "https://github.com/refout/25DogMusic/issues"));
         body.Children.Add(links);
 
+        body.Children.Add(AboutSection(
+            "开源组件",
+            "本程序基于以下开源项目构建，感谢作者与社区：\n" +
+            "· Avalonia（MIT）— 跨平台 UI 框架\n" +
+            "· LibVLCSharp / VideoLAN LibVLC（LGPL-2.1+）— 音频播放内核\n" +
+            "· NAudio（MIT）— WASAPI 环回采集与频谱\n" +
+            "· FluentIcons.Avalonia（MIT）— 图标\n" +
+            "· Terminal.Gui（MIT）— 实验性终端界面\n" +
+            "完整清单与许可证文本见仓库 THIRD-PARTY-NOTICES.md。"));
+
+        body.Children.Add(AboutSection(
+            "免责声明",
+            "1. 本程序为第三方开源客户端，与飞牛（fnOS）官方无隶属或合作关系。\n" +
+            "2. 程序仅通过你填写的服务器地址访问你自己的音乐服务，不提供、不分发任何音源内容。\n" +
+            "3. 请确保你所播放的内容来源合法，因使用本程序产生的版权等责任由使用者自行承担。\n" +
+            "4. 软件按「现状」提供，不附带任何明示或暗示的担保；使用风险由使用者自行承担。\n" +
+            "5. 播放内核（VLC）遵循其自身许可证，本程序以动态链接方式使用。"));
+
+        body.Children.Add(AboutSection(
+            "开源协议",
+            "本项目以 MIT 协议开源，可自由使用、修改与分发，请保留版权与许可声明。"));
+
         return MakeSettingsCard(body);
+    }
+
+    /// <summary>关于页的分节：小标题 + 正文。</summary>
+    Control AboutSection(string heading, string text)
+    {
+        var stack = new StackPanel { Spacing = 6 };
+        stack.Children.Add(new TextBlock
+        {
+            Text = heading,
+            FontSize = 13,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = TextPrimary
+        });
+        stack.Children.Add(new TextBlock
+        {
+            Text = text,
+            FontSize = 12.5,
+            Foreground = TextSecondary,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 21
+        });
+        return stack;
     }
 
     Button MakeLinkButton(string text, string url)

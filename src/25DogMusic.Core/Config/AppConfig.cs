@@ -29,7 +29,11 @@ public sealed class AppConfig
     public bool SpectrumEnabled { get; set; } = true;
 
     static string ConfigDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FnMusic");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "25DogMusic");
+
+    /// <summary>旧版本使用的配置目录，首次运行时迁移一次。</summary>
+    static string LegacyConfigFile => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FnMusic", "config.json");
 
     static string ConfigFile => Path.Combine(ConfigDir, "config.json");
 
@@ -37,6 +41,7 @@ public sealed class AppConfig
     {
         try
         {
+            MigrateLegacyConfig();
             if (File.Exists(ConfigFile))
             {
                 var json = File.ReadAllText(ConfigFile);
@@ -49,6 +54,22 @@ public sealed class AppConfig
         }
 
         return new AppConfig();
+    }
+
+    /// <summary>把旧版 FnMusic 目录下的配置复制到新目录，失败时保留旧文件不动。</summary>
+    static void MigrateLegacyConfig()
+    {
+        if (File.Exists(ConfigFile) || !File.Exists(LegacyConfigFile)) return;
+
+        try
+        {
+            Directory.CreateDirectory(ConfigDir);
+            File.Copy(LegacyConfigFile, ConfigFile);
+        }
+        catch
+        {
+            // 迁移失败则按未登录状态处理
+        }
     }
 
     public void Save()

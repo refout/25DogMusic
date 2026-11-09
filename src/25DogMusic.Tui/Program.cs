@@ -295,7 +295,7 @@ static void PrintHelp()
         fnmusic sign <path> <body> 输出本地计算的 authx（用于和浏览器对比）
         fnmusic token              打印已保存的 token
 
-        配置文件: %LOCALAPPDATA%\FnMusic\config.json
+        配置文件: %LOCALAPPDATA%\25DogMusic\config.json
         """);
 }
 

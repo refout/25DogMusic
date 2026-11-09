@@ -2,6 +2,10 @@
 
 基于 [Avalonia](https://avaloniaui.net/) 的跨平台桌面音乐客户端（Windows / Linux / macOS），连接飞牛 NAS（fnOS）的音乐服务，支持在线浏览、搜索、播放与歌词显示。
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-ff375f.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/refout/25DogMusic)](https://github.com/refout/25DogMusic/releases)
+[![Pages](https://img.shields.io/badge/site-refout.github.io%2F25DogMusic-ff375f)](https://refout.github.io/25DogMusic/)
+
 ![界面预览](docs/assets/home.png)
 
 ## 功能特性
@@ -13,7 +17,7 @@
 - **频谱 / 均衡器**：基于 WASAPI 环回的实时频谱可视化，内置均衡器预设
 - **漫游**：随机漫游曲库，下方展示漫游队列卡片，点击即可切换
 - **外观**：深色 / 浅色主题、封面取色背景、Windows 11 云母材质与圆角、Windows 10 标题栏适配
-- **设置与关于**：账号与连接、外观、音质与播放分组配置；「关于」页展示版本说明，并可一键从 GitHub 检查更新
+- **设置与关于**：账号与连接、外观、音质与播放分组配置；「关于」页展示版本、开源组件与免责声明，并可一键从 GitHub 检查更新
 - **后台播放**：关闭窗口后可继续播放并驻留托盘
 
 ## 技术栈
@@ -51,7 +55,9 @@ dotnet build src/25DogMusic.slnx
 dotnet run --project src/25DogMusic.Desktop
 ```
 
-首次启动需在登录页填写飞牛 NAS 地址并登录。程序不内置任何服务器地址，登录信息只保存在系统本地应用数据目录下的 `FnMusic/config.json`（Windows：`%LOCALAPPDATA%\FnMusic\config.json`，Linux：`~/.local/share/FnMusic/config.json`，macOS：`~/Library/Application Support/FnMusic/config.json`）。
+首次启动需在登录页填写飞牛 NAS 地址并登录。程序不内置任何服务器地址，登录信息只保存在系统本地应用数据目录下的 `25DogMusic/config.json`（Windows：`%LOCALAPPDATA%\25DogMusic\config.json`，Linux：`~/.local/share/25DogMusic/config.json`，macOS：`~/Library/Application Support/25DogMusic/config.json`）。旧版本的 `FnMusic` 目录会在首次启动时自动迁移。
+
+> 为什么不放在安装目录？安装目录（如 `Program Files`）通常需要管理员权限才能写入，且多用户共用一台机器时每个人的账号与偏好应当独立；放到用户本地数据目录可以做到免提权、按用户隔离，升级或重装程序也不会丢失登录状态。
 
 ## 构建与发布
 
@@ -69,8 +75,22 @@ dotnet publish src/25DogMusic.Desktop/25DogMusic.Desktop.csproj `
   -o publish/25DogMusic-win-x64
 ```
 
+## 开源协议与免责声明
+
+本项目以 [MIT 协议](LICENSE) 开源，可自由使用、修改与分发，请保留版权与许可声明。
+
+使用的第三方组件及其许可证见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。其中播放内核 LibVLCSharp / VideoLAN LibVLC 以 LGPL-2.1-or-later 授权，本项目以动态链接方式使用，发布包内保持独立的库文件，可自行替换。
+
+免责声明：
+
+- 本项目为第三方开源客户端，与飞牛（fnOS）官方无隶属或合作关系。
+- 程序仅通过你填写的服务器地址访问你自己的音乐服务，不提供、不分发任何音源内容。
+- 请确保所播放内容的来源合法，因使用本程序产生的版权等责任由使用者自行承担。
+- 软件按「现状」提供，不附带任何明示或暗示的担保。
+
 ## 相关链接
 
 - 项目主页：<https://refout.github.io/25DogMusic/>
 - 下载最新版本：<https://github.com/refout/25DogMusic/releases/latest>
 - 问题反馈：<https://github.com/refout/25DogMusic/issues>
+- 第三方组件说明：[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
