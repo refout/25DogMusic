@@ -479,14 +479,8 @@ public partial class MainWindow : Window
         loginButton.Click += async (_, _) =>
             await PasswordLoginAsync(serverBox.Text, userBox.Text, passBox.Text, statusText);
 
-        var oauthButton = MakeFormButton("在浏览器中授权");
+        var oauthButton = MakeFormButton("打开浏览器");
         oauthButton.Click += async (_, _) => await StartOAuthAsync(serverBox.Text, statusText);
-
-        var codeBox = MakeFormBox(string.Empty, "code 或完整回跳地址");
-        var submitButton = MakeFormButton("提交授权码");
-        // 用 Auto 列 + 最小宽度：卡片变窄时整行仍能一起收缩，不会被固定宽度撑破
-        submitButton.MinWidth = 104;
-        submitButton.Click += async (_, _) => await SubmitOAuthAsync(serverBox.Text, codeBox.Text, statusText);
 
         var credentials = new Grid { ColumnDefinitions = new ColumnDefinitions("*,12,*") };
         credentials.Children.Add(BuildField("用户名", userBox));
@@ -494,26 +488,12 @@ public partial class MainWindow : Window
         Grid.SetColumn(passField, 2);
         credentials.Children.Add(passField);
 
-        var codeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,10,Auto") };
-        codeRow.Children.Add(codeBox);
-        Grid.SetColumn(submitButton, 2);
-        codeRow.Children.Add(submitButton);
-
         var passwordPane = new StackPanel { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Stretch };
         passwordPane.Children.Add(credentials);
         passwordPane.Children.Add(loginButton);
 
         var oauthPane = new StackPanel { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Stretch };
-        oauthPane.Children.Add(new TextBlock
-        {
-            Text = "点击后在浏览器登录飞牛 NAS，授权完成会自动返回并登录；若浏览器未自动返回，也可以把回跳地址或 code 粘贴到下方。",
-            FontSize = 11.5,
-            Foreground = TextMuted,
-            TextWrapping = TextWrapping.Wrap,
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        });
         oauthPane.Children.Add(oauthButton);
-        oauthPane.Children.Add(codeRow);
 
         // 两种登录方式二选一：上方切换，下方只显示当前方式
         var panes = new Control[] { passwordPane, oauthPane };
@@ -1331,29 +1311,6 @@ public partial class MainWindow : Window
         }
     }
 
-    async Task SubmitOAuthAsync(string? server, string? input, TextBlock status)
-    {
-        var code = ExtractCode(input ?? string.Empty);
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            status.Text = "请粘贴授权码或回跳地址";
-            return;
-        }
-
-        try
-        {
-            status.Text = "授权登录中…";
-            var device = EnsureDeviceId();
-            using var api = new MusicApiClient(server?.Trim() ?? _config.BaseUrl, null, device);
-            var token = await api.LoginWithOAuthCodeAsync(code);
-            ApplySession(server?.Trim() ?? _config.BaseUrl, token, _config.LastUsername, device, "授权登录成功");
-        }
-        catch (Exception ex)
-        {
-            status.Text = $"授权失败：{ex.Message}";
-        }
-    }
-
     void ApplySession(string server, string token, string? username, string device, string message)
     {
         _config.BaseUrl = server;
@@ -1385,17 +1342,6 @@ public partial class MainWindow : Window
 
         ShowSettingsPage("已退出登录");
         StatusText.Text = "已退出登录";
-    }
-
-    static string ExtractCode(string input)
-    {
-        var index = input.IndexOf("code=", StringComparison.Ordinal);
-        if (index < 0) return input.Trim();
-
-        var code = input[(index + 5)..];
-        var end = code.IndexOf('&');
-        if (end >= 0) code = code[..end];
-        return Uri.UnescapeDataString(code);
     }
 
     MusicApiClient Api() => _api ??= CreateClient();
