@@ -149,7 +149,10 @@ public sealed class MusicApiClient : IDisposable
 
     // ---- 登录：NAS OAuth 授权码 ----
 
-    public async Task<string> BuildOAuthUrlAsync(CancellationToken ct = default)
+    /// <summary>
+    /// 生成 NAS 授权页地址。传入 redirectUri 时使用回环地址，否则回跳到音乐网页的 /oauth/result。
+    /// </summary>
+    public async Task<string> BuildOAuthUrlAsync(string? redirectUri = null, CancellationToken ct = default)
     {
         using var doc = await GetAsync("/sys/config", null, ct);
         var data = doc.RootElement.GetProperty("data");
@@ -168,7 +171,7 @@ public sealed class MusicApiClient : IDisposable
             origin = u.GetString()!.TrimEnd('/');
         }
 
-        var redirect = Uri.EscapeDataString(origin + "/music/oauth/result");
+        var redirect = Uri.EscapeDataString(redirectUri ?? origin + "/music/oauth/result");
         var appName = Uri.EscapeDataString("飞牛音乐");
         return $"{origin}/signin?client_id={Uri.EscapeDataString(clientId)}&redirect_uri={redirect}&app_name={appName}";
     }

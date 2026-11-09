@@ -518,7 +518,7 @@ public partial class MainWindow : Window
         oauthPane.Children.Add(SectionHeading("浏览器授权"));
         oauthPane.Children.Add(new TextBlock
         {
-            Text = "打开飞牛 NAS 授权页，登录后把回跳地址或 code 粘贴到下方。",
+            Text = "点击后在浏览器登录飞牛 NAS，授权完成会自动返回并登录；若浏览器未自动返回，也可以把回跳地址或 code 粘贴到下方。",
             FontSize = 11.5,
             Foreground = TextMuted,
             TextWrapping = TextWrapping.Wrap
@@ -1264,11 +1264,37 @@ public partial class MainWindow : Window
         try
         {
             status.Text = "正在打开授权页…";
+            var baseUrl = server?.Trim() ?? _config.BaseUrl;
             var device = EnsureDeviceId();
-            using var api = new MusicApiClient(server?.Trim() ?? _config.BaseUrl, null, device);
-            var url = await api.BuildOAuthUrlAsync();
+            using var api = new MusicApiClient(baseUrl, null, device);
+            // 音乐网页的 /oauth/result 会立刻消费授权码，这里改用本地回环地址直接接收 code
+            using var loopback = new OAuthLoopbackListener();
+            var url = await api.BuildOAuthUrlAsync(loopback.RedirectUri);
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-            status.Text = "已在浏览器打开授权页";
+
+            status.Text = "请在浏览器完成 NAS 登录，授权后会自动返回并完成登录…";
+            var (code, error) = await loopback.WaitForCodeAsync(TimeSpan.FromMinutes(3));
+            if (string.IsNullOrEmpty(code))
+            {
+                status.Text = string.IsNullOrEmpty(error)
+                    ? "授权超时，请重新点击「在浏览器中授权」"
+                    : $"授权未完成：{error}";
+                return;
+            }
+
+            status.Text = "授权登录中…";
+            string token;
+            try
+            {
+                token = await api.LoginWithOAuthCodeAsync(code);
+            }
+            catch (Exception ex)
+            {
+                status.Text = $"授权失败：{ex.Message}";
+                return;
+            }
+
+            ApplySession(baseUrl, token, _config.LastUsername, device, "授权登录成功");
         }
         catch (Exception ex)
         {
