@@ -104,10 +104,12 @@
   .chip { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font-size: 13px; color: var(--muted); }
 
   .build { display: grid; grid-template-columns: 1.05fr 1fr; gap: 28px; align-items: start; }
+  .build > * { min-width: 0; }
   .code {
     background: #100d15; border: 1px solid var(--border); border-radius: 14px;
     padding: 18px 20px; font-family: "Cascadia Code", Consolas, monospace;
-    font-size: 13px; color: #d6cfe3; overflow-x: auto; white-space: pre;
+    font-size: 13px; color: #d6cfe3; min-width: 0;
+    white-space: pre-wrap; overflow-wrap: anywhere;
   }
   .code .c { color: #7c7488; }
   .code .k { color: #ff9bb0; }
@@ -246,8 +248,9 @@
 <span class="k">dotnet</span> run --project src/25DogMusic.Desktop
 
 <span class="c"># NativeAOT 打包（需 VS C++ 桌面开发组件）</span>
-<span class="k">dotnet</span> publish src/25DogMusic.Desktop/25DogMusic.Desktop.csproj `
-  -c Release -r win-x64 --self-contained `
+<span class="k">dotnet</span> publish `
+  src/25DogMusic.Desktop/25DogMusic.Desktop.csproj `
+  -c Release -r win-x64 --self-contained true `
   -p:PublishAot=true -o publish/win-x64</div>
         <div>
           <p style="color:var(--muted);margin-top:0">
