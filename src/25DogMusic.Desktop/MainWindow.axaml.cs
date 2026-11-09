@@ -180,6 +180,9 @@ public partial class MainWindow : Window
     Playlist? _currentPlaylist;
     int _queueIndex = -1;
     readonly List<Track> _roamTracks = new();
+    readonly List<(Track Track, string RoamId)> _roamUpcoming = new();
+    string? _roamPrefetchCursor;
+    bool _roamPrefetching;
     Control? _roamQueueSection;
 
     // 歌单「添加歌曲」侧边抽屉
@@ -3141,12 +3144,17 @@ public partial class MainWindow : Window
             _queueIndex = 0;
             _roamTracks.Clear();
             _roamTracks.Add(result.Value.Track);
+            _roamUpcoming.Clear();
+            _roamPrefetchCursor = result.Value.RoamId;
             _roamQueueSection = null;
 
             BuildRoamHero(result.Value.Track);
             BuildRoamQueueSection();
             PlayTrack(result.Value.Track);
             StatusText.Text = "漫游已开始";
+
+            // 预取后续若干首，让下方队列一次能展示多条而不是只有当前一首
+            _ = PrefetchRoamAsync();
         }
         catch (Exception ex)
         {
@@ -3315,7 +3323,7 @@ public partial class MainWindow : Window
         _ = SetBackdropAsync(track.CoverId);
     }
 
-    /// <summary>漫游页下方展示本次漫游已走过的曲目队列，点卡片可直接切换播放。</summary>
+    /// <summary>漫游页下方展示已听过的曲目与预取到的待播推荐，点卡片可直接切换。</summary>
     void BuildRoamQueueSection()
     {
         if (_roamQueueSection is not null && _roamQueueSection.Parent is Panel oldParent)
@@ -3324,7 +3332,7 @@ public partial class MainWindow : Window
         }
         _roamQueueSection = null;
 
-        if (_roamTracks.Count == 0) return;
+        if (_roamTracks.Count == 0 && _roamUpcoming.Count == 0) return;
 
         var section = new StackPanel { Spacing = 8, Margin = new Thickness(0, 28, 0, 0) };
 
@@ -3338,7 +3346,7 @@ public partial class MainWindow : Window
         });
         header.Children.Add(new TextBlock
         {
-            Text = $"{_roamTracks.Count} 首 · 点击切换",
+            Text = $"已听 {_roamTracks.Count} 首 · 待播 {_roamUpcoming.Count} 首",
             FontSize = 11,
             Foreground = TextMuted,
             VerticalAlignment = VerticalAlignment.Bottom,
@@ -3347,9 +3355,13 @@ public partial class MainWindow : Window
         section.Children.Add(header);
 
         var strip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 2, 0, 0) };
-        for (var i = 0; i < _roamTracks.Count; i++)
+        foreach (var track in _roamTracks)
         {
-            strip.Children.Add(BuildRoamQueueCard(_roamTracks[i], i));
+            strip.Children.Add(BuildRoamQueueCard(track, upcoming: false));
+        }
+        foreach (var item in _roamUpcoming)
+        {
+            strip.Children.Add(BuildRoamQueueCard(item.Track, upcoming: true));
         }
 
         section.Children.Add(new ScrollViewer
@@ -3363,7 +3375,7 @@ public partial class MainWindow : Window
         _roamQueueSection = section;
     }
 
-    Control BuildRoamQueueCard(Track track, int index)
+    Control BuildRoamQueueCard(Track track, bool upcoming)
     {
         var isCurrent = _currentTrack is not null && _currentTrack.Guid == track.Guid;
 
@@ -3384,7 +3396,7 @@ public partial class MainWindow : Window
             Child = coverGrid
         };
 
-        var texts = new StackPanel { Spacing = 1, Margin = new Thickness(0, 7, 0, 0) };
+        var texts = new StackPanel { Spacing = 1, Margin = new Thickness(0, 7, 0, 0), Opacity = upcoming ? 0.86 : 1 };
         texts.Children.Add(new TextBlock
         {
             Text = track.Title,
@@ -3395,9 +3407,9 @@ public partial class MainWindow : Window
         });
         texts.Children.Add(new TextBlock
         {
-            Text = isCurrent ? "正在播放" : track.Artist,
+            Text = isCurrent ? "正在播放" : upcoming ? "即将推荐" : track.Artist,
             FontSize = 10.5,
-            Foreground = isCurrent ? AccentSoft : TextMuted,
+            Foreground = isCurrent ? AccentSoft : upcoming ? AccentSoft : TextMuted,
             MaxWidth = 148,
             TextTrimming = TextTrimming.CharacterEllipsis
         });
@@ -3413,21 +3425,75 @@ public partial class MainWindow : Window
             CornerRadius = new CornerRadius(12),
             Background = Brushes.Transparent,
             Cursor = new Cursor(StandardCursorType.Hand),
-            Child = stack
+            Child = stack,
+            Opacity = upcoming ? 0.92 : 1
         };
         card.PointerEntered += (_, _) => card.Background = RowHover;
         card.PointerExited += (_, _) => card.Background = Brushes.Transparent;
         card.PointerPressed += (_, _) =>
         {
-            PlayFromQueue(_roamTracks, index);
-            _queue = new List<Track>(_roamTracks);
-            _queueIndex = index;
-            SyncRoamHero(_roamTracks[index]);
+            if (upcoming)
+            {
+                var index = _roamUpcoming.FindIndex(item => item.Track.Guid == track.Guid);
+                var chainId = index >= 0 ? _roamUpcoming[index].RoamId : null;
+                if (index >= 0) _roamUpcoming.RemoveRange(0, index + 1);
+                if (chainId is not null)
+                {
+                    _roamId = chainId;
+                    _roamPrefetchCursor = chainId;
+                }
+            }
+
+            if (!_roamTracks.Any(item => item.Guid == track.Guid)) _roamTracks.Add(track);
+            _queue = new List<Track> { track };
+            _queueIndex = 0;
+            SyncRoamHero(track);
             BuildRoamQueueSection();
+            PlayTrack(track);
+            _ = PrefetchRoamAsync();
         };
 
         _ = AssignRoamQueueCoverAsync(image, track.CoverId);
         return card;
+    }
+
+    /// <summary>沿漫游链路向前预取若干首待播曲目，用于队列展示与「下一首」直接消费。</summary>
+    async Task PrefetchRoamAsync()
+    {
+        if (_roamPrefetching || _roamId is null) return;
+
+        _roamPrefetching = true;
+        try
+        {
+            var cursor = _roamPrefetchCursor ?? _roamId;
+            var changed = false;
+
+            while (_roamUpcoming.Count < 6)
+            {
+                using var doc = await Api().RoamNextAsync(cursor);
+                var result = Library.ParseRoam(doc);
+                if (result is null) break;
+
+                var track = result.Value.Track;
+                cursor = result.Value.RoamId;
+                _roamPrefetchCursor = cursor;
+                changed = true;
+
+                var seen = _roamTracks.Any(item => item.Guid == track.Guid)
+                    || _roamUpcoming.Any(item => item.Track.Guid == track.Guid);
+                if (!seen) _roamUpcoming.Add((track, result.Value.RoamId));
+            }
+
+            if (changed && _mode == Mode.Roam) BuildRoamQueueSection();
+        }
+        catch
+        {
+            // 预取失败不影响正常漫游，后续「下一首」会直接请求接口
+        }
+        finally
+        {
+            _roamPrefetching = false;
+        }
     }
 
     async Task AssignRoamQueueCoverAsync(Image image, string? coverId)
@@ -3444,6 +3510,24 @@ public partial class MainWindow : Window
             return true;
         }
 
+        // 下一首优先使用预取队列；上一首会改变漫游链路，需要重新预取
+        if (dir > 0 && _roamUpcoming.Count > 0)
+        {
+            var next = _roamUpcoming[0];
+            _roamUpcoming.RemoveAt(0);
+            _roamId = next.RoamId;
+
+            _queue = new List<Track> { next.Track };
+            _queueIndex = 0;
+            if (!_roamTracks.Any(track => track.Guid == next.Track.Guid)) _roamTracks.Add(next.Track);
+
+            SyncRoamHero(next.Track);
+            BuildRoamQueueSection();
+            PlayTrack(next.Track);
+            _ = PrefetchRoamAsync();
+            return true;
+        }
+
         try
         {
             using var doc = dir > 0
@@ -3457,6 +3541,13 @@ public partial class MainWindow : Window
             _queue = new List<Track> { result.Value.Track };
             _queueIndex = 0;
 
+            if (dir < 0)
+            {
+                // 回退后原预取链路失效，清空并从新的位置重新预取
+                _roamUpcoming.Clear();
+                _roamPrefetchCursor = result.Value.RoamId;
+            }
+
             if (!_roamTracks.Any(track => track.Guid == result.Value.Track.Guid))
             {
                 _roamTracks.Add(result.Value.Track);
@@ -3465,6 +3556,7 @@ public partial class MainWindow : Window
             SyncRoamHero(result.Value.Track);
             BuildRoamQueueSection();
             PlayTrack(result.Value.Track);
+            _ = PrefetchRoamAsync();
             return true;
         }
         catch (Exception ex)
@@ -3680,6 +3772,10 @@ public partial class MainWindow : Window
         var albumsTask = FetchAlbumListAsync(() => Api().GetAlbumsAsync(1, 8), 8, "加载专辑失败");
 
         await Task.WhenAll(recentTask, favoritesTask, latestTask, albumsTask);
+
+        // 等待期间用户可能已切到别的页面（例如登录失效跳到设置），此时不要再往当前页追加首页内容
+        if (_mode != Mode.Home) return;
+
         var recent = recentTask.Result;
         var favorites = favoritesTask.Result;
         var latest = latestTask.Result;
@@ -3809,25 +3905,39 @@ public partial class MainWindow : Window
         return panel;
     }
 
-    /// <summary>首页入口卡片：高度固定、宽度随窗口拉伸，封面以三张错位旋转的卡片叠放。</summary>
+    /// <summary>首页入口卡片：高度固定、宽度随窗口拉伸，封面铺满卡片，文字叠在左下角。</summary>
     Control BuildHomeShortcutCard(string title, string subtitle, IEnumerable<string?> coverIds, Func<Task> onClick, List<(string?, Image)> pending)
     {
         var covers = coverIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().Take(3).ToList();
 
-        var stack = new Canvas { Width = 108, Height = 86, VerticalAlignment = VerticalAlignment.Center };
+        // 底层大封面铺满整张卡片
+        var baseImage = new Image { Stretch = Stretch.UniformToFill };
+        if (covers.Count > 0) pending.Add((covers[0], baseImage));
+
+        var baseLayer = new Grid();
+        baseLayer.Children.Add(new Border { Background = CoverPlaceholder });
+        baseLayer.Children.Add(baseImage);
+
+        // 右上角两张小封面错位旋转，作为层叠装饰
+        var deco = new Canvas
+        {
+            Width = 116,
+            Height = 96,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, -6, -8, 0)
+        };
         var layout = new (double Left, double Top, double Size, double Angle, double Opacity)[]
         {
-            (2, 16, 54, -15, 0.7),
-            (26, 6, 56, -4, 0.88),
-            (50, 16, 60, 10, 1.0)
+            (0, 14, 56, -14, 0.9),
+            (44, 4, 60, 10, 1.0)
         };
 
-        var index = 0;
-        foreach (var (left, top, size, angle, opacity) in layout)
+        for (var i = 0; i < layout.Length; i++)
         {
+            var (left, top, size, angle, opacity) = layout[i];
             var image = new Image { Stretch = Stretch.UniformToFill };
-            if (index < covers.Count) pending.Add((covers[index], image));
-            index++;
+            if (i + 1 < covers.Count) pending.Add((covers[i + 1], image));
 
             var cover = new Border
             {
@@ -3840,44 +3950,67 @@ public partial class MainWindow : Window
                 Opacity = opacity,
                 RenderTransformOrigin = RelativePoint.Center,
                 RenderTransform = new RotateTransform(angle),
-                BoxShadow = BoxShadows.Parse("0 6 16 0 #59000000")
+                BoxShadow = BoxShadows.Parse("0 6 16 0 #66000000")
             };
             Canvas.SetLeft(cover, left);
             Canvas.SetTop(cover, top);
-            stack.Children.Add(cover);
+            deco.Children.Add(cover);
         }
 
-        var texts = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
+        // 底部渐隐，保证文字在任何封面上都可读
+        var scrim = new Border
+        {
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Height = 78,
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0.5, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0.5, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Colors.Transparent, 0),
+                    new GradientStop(Color.Parse("#D9000000"), 1)
+                }
+            }
+        };
+
+        var texts = new StackPanel
+        {
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(14, 0, 14, 11)
+        };
         texts.Children.Add(new TextBlock
         {
             Text = title,
             FontSize = 15,
             FontWeight = FontWeight.SemiBold,
-            Foreground = TextPrimary,
+            Foreground = Brushes.White,
             TextTrimming = TextTrimming.CharacterEllipsis
         });
         texts.Children.Add(new TextBlock
         {
             Text = subtitle,
-            FontSize = 12,
-            Foreground = TextSecondary,
+            FontSize = 11.5,
+            Foreground = new SolidColorBrush(Colors.White, 0.78),
             TextTrimming = TextTrimming.CharacterEllipsis
         });
 
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 14 };
-        row.Children.Add(stack);
-        Grid.SetColumn(texts, 1);
-        row.Children.Add(texts);
+        var content = new Grid();
+        content.Children.Add(baseLayer);
+        content.Children.Add(deco);
+        content.Children.Add(scrim);
+        content.Children.Add(texts);
 
         var card = new Border
         {
             Height = 116,
-            Padding = new Thickness(10, 0, 14, 0),
             CornerRadius = new CornerRadius(14),
             ClipToBounds = true,
-            Background = CardBg,
+            Background = CoverPlaceholder,
             Cursor = new Cursor(StandardCursorType.Hand),
-            Child = row,
+            Child = content,
             RenderTransform = new TranslateTransform(0, 0),
             Transitions = new Transitions
             {
@@ -3932,7 +4065,8 @@ public partial class MainWindow : Window
         foreach (var (coverId, image) in pending)
         {
             if (token.IsCancellationRequested) return;
-            var bitmap = await GetCoverAsync(coverId, 110);
+            // 首页卡片封面要铺满整张卡片，按较大尺寸解码避免拉伸发糊
+            var bitmap = await GetCoverAsync(coverId, 320);
             if (bitmap is not null) image.Source = bitmap;
         }
     }
@@ -4926,6 +5060,8 @@ public partial class MainWindow : Window
         if (index < 0 || index >= queue.Count) return;
         _roaming = false;
         _roamId = null;
+        _roamUpcoming.Clear();
+        _roamPrefetchCursor = null;
         _queue = queue.ToList();
         _queueIndex = index;
         PlayTrack(queue[index]);
