@@ -186,6 +186,7 @@ public partial class MainWindow : Window
     Control? _roamQueueSection;
     ScrollViewer? _roamQueueScroll;
     Control? _homePage;
+    TabControl? _settingsTabs;
 
     // 歌单「添加歌曲」侧边抽屉
     Playlist? _pickerPlaylist;
@@ -267,6 +268,7 @@ public partial class MainWindow : Window
             UpdateSplitHeight();
             UpdateRoamQueueHeight();
             UpdateHomePageHeight();
+            UpdateSettingsTabHeight();
         };
 
         NavHome.Click += async (_, _) => await LoadHomeAsync();
@@ -453,16 +455,17 @@ public partial class MainWindow : Window
 
         var tabs = new TabControl
         {
-            Width = 680,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
             Margin = new Thickness(0, 8, 0, 0)
         };
 
-        // 使用 Fluent 主题默认的 TabItem 外观，仅提供标题文本
-        tabs.Items.Add(new TabItem { Header = "账号与连接", Content = BuildAccountCard(message) });
-        tabs.Items.Add(new TabItem { Header = "外观", Content = BuildAppearanceCard() });
-        tabs.Items.Add(new TabItem { Header = "音质与播放", Content = BuildPlaybackCard() });
-        tabs.Items.Add(new TabItem { Header = "关于", Content = BuildAboutCard() });
+        // 使用 Fluent 主题默认的 TabItem 外观，仅提供标题文本；
+        // 每个 Tab 的内容各自滚动，页面外层不滚动，宽度也不再固定
+        tabs.Items.Add(new TabItem { Header = "账号与连接", Content = BuildSettingsTabScroll(BuildAccountCard(message)) });
+        tabs.Items.Add(new TabItem { Header = "外观", Content = BuildSettingsTabScroll(BuildAppearanceCard()) });
+        tabs.Items.Add(new TabItem { Header = "音质与播放", Content = BuildSettingsTabScroll(BuildPlaybackCard()) });
+        tabs.Items.Add(new TabItem { Header = "关于", Content = BuildSettingsTabScroll(BuildAboutCard()) });
 
         tabs.SelectedIndex = Math.Clamp(_settingsTab, 0, tabs.ItemCount - 1);
         tabs.SelectionChanged += (_, _) =>
@@ -472,9 +475,28 @@ public partial class MainWindow : Window
         };
 
         ContentPanel.Children.Add(tabs);
+        _settingsTabs = tabs;
+        ContentScroll.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
+        UpdateSettingsTabHeight();
 
         // 首次进入也播放一次淡入过渡
         AnimateSettingsTab(tabs.SelectedItem as TabItem);
+    }
+
+    /// <summary>设置页 Tab 内容外层：只在内容区域滚动。</summary>
+    Control BuildSettingsTabScroll(Control content) => new ScrollViewer
+    {
+        VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+        Margin = new Thickness(0, 8, 0, 0),
+        Content = content
+    };
+
+    /// <summary>TabControl 取视口高度，使标题栏固定、只有内容区滚动。</summary>
+    void UpdateSettingsTabHeight()
+    {
+        if (_settingsTabs is null) return;
+        _settingsTabs.Height = Math.Max(240, ContentScroll.Bounds.Height - 8);
     }
 
     /// <summary>设置页切换 Tab 时内容淡入并轻微上移。</summary>
@@ -523,7 +545,7 @@ public partial class MainWindow : Window
 
     Control BuildAboutCard()
     {
-        var body = new StackPanel { Spacing = 18, Width = 620 };
+        var body = new StackPanel { Spacing = 18 };
 
         // 应用图标 + 名称 / 版本
         var logo = new Image { Width = 64, Height = 64, Stretch = Stretch.Uniform };
@@ -1140,8 +1162,7 @@ public partial class MainWindow : Window
         Background = Surface,
         CornerRadius = new CornerRadius(12),
         Padding = new Thickness(18),
-        Width = 640,
-        HorizontalAlignment = HorizontalAlignment.Left,
+        HorizontalAlignment = HorizontalAlignment.Stretch,
         Child = content
     };
 
@@ -1164,8 +1185,7 @@ public partial class MainWindow : Window
                 Text = desc,
                 FontSize = 11.5,
                 Foreground = TextMuted,
-                TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 520
+                TextWrapping = TextWrapping.Wrap
             });
         }
 
@@ -2181,6 +2201,7 @@ public partial class MainWindow : Window
         // 离开首页/漫游页后恢复页面滚动（这些页面会临时禁用外层滚动）
         ContentScroll.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
         _homePage = null;
+        _settingsTabs = null;
         _rowImages.Clear();
         _rowBorders.Clear();
         _heartIcons.Clear();
@@ -3363,6 +3384,9 @@ public partial class MainWindow : Window
     /// <summary>漫游页下方展示已听过的曲目与预取到的待播推荐，点卡片可直接切换。</summary>
     void BuildRoamQueueSection()
     {
+        // 播放结束时可能自动触发漫游切歌，此时若已离开漫游页，不要再往当前页面追加队列
+        if (_mode != Mode.Roam) return;
+
         if (_roamQueueSection is not null && _roamQueueSection.Parent is Panel oldParent)
         {
             oldParent.Children.Remove(_roamQueueSection);
