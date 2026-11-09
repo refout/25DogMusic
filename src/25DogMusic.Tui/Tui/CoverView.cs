@@ -1,6 +1,3 @@
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
 using Terminal.Gui;
 using DRect = System.Drawing.Rectangle;
 
@@ -12,13 +9,13 @@ namespace FnMusic.Tui;
 /// </summary>
 public sealed class CoverView : View
 {
-    Image<Rgba32>? _image;
+    RgbaImage? _image;
     byte[]? _buffer;
     int _bufferWidth;
     int _bufferHeight;
 
     public ColorTheme Theme { get; private set; } = ColorTheme.Default;
-    public Image<Rgba32>? Image => _image;
+    public RgbaImage? Image => _image;
 
     public CoverView()
     {
@@ -29,21 +26,13 @@ public sealed class CoverView : View
 
     public ColorTheme SetJpeg(byte[]? data)
     {
-        var next = data is null ? null : Decode(data);
-        var old = _image;
+        var next = data is null ? null : RgbaImage.TryDecode(data);
         _image = next;
-        old?.Dispose();
 
         InvalidateBuffer();
         Theme = next is null ? ColorTheme.Default : ColorTheme.FromImage(next);
         SetNeedsDraw();
         return Theme;
-    }
-
-    static Image<Rgba32>? Decode(byte[] data)
-    {
-        try { return SixLabors.ImageSharp.Image.Load<Rgba32>(data); }
-        catch { return null; }
     }
 
     void InvalidateBuffer()
@@ -117,8 +106,7 @@ public sealed class CoverView : View
         if (_image is null) return;
         if (_buffer is not null && _bufferWidth == width && _bufferHeight == height) return;
 
-        using var resized = _image.Clone();
-        resized.Mutate(ctx => ctx.Resize(width, height));
+        var resized = _image.Resize(width, height);
 
         var buffer = new byte[width * height * 3];
         var index = 0;
@@ -136,11 +124,5 @@ public sealed class CoverView : View
         _buffer = buffer;
         _bufferWidth = width;
         _bufferHeight = height;
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing) _image?.Dispose();
-        base.Dispose(disposing);
     }
 }

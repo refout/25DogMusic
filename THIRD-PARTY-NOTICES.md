@@ -21,7 +21,7 @@
 | 组件 | 版本 | 许可证 | 用途 |
 | --- | --- | --- | --- |
 | [Terminal.Gui](https://github.com/gui-cs/Terminal.Gui) | 2.0.0 | MIT | 终端界面框架 |
-| [SixLabors.ImageSharp](https://github.com/SixLabors/ImageSharp) | 3.1.11 | Six Labors Split License（开源用途为 Apache-2.0） | 终端封面渲染 |
+| [StbImageSharp](https://github.com/StbSharp/StbImageSharp) | 2.30.16 | Unlicense / MIT | 终端封面解码与缩放 |
 
 ## 构建与发布
 

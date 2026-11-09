@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using SixLabors.ImageSharp.Processing;
 using FnMusic.Api;
 using FnMusic.Auth;
 using FnMusic.Config;
@@ -92,7 +91,8 @@ switch (command)
     {
         if (args.Length < 2) { Console.WriteLine("用法: fnmusic theme <coverId>"); return; }
         var bytes = await api.GetCoverAsync(args[1], 300);
-        using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(bytes);
+        var image = FnMusic.Tui.RgbaImage.TryDecode(bytes);
+        if (image is null) { Console.WriteLine("封面解码失败"); return; }
         var theme = FnMusic.Tui.ColorTheme.FromImage(image);
         Console.WriteLine($"bg={theme.Background.R},{theme.Background.G},{theme.Background.B}");
         Console.WriteLine($"panel={theme.Panel.R},{theme.Panel.G},{theme.Panel.B}");
@@ -107,10 +107,10 @@ switch (command)
     {
         if (args.Length < 2) { Console.WriteLine("用法: fnmusic render <coverId>"); return; }
         var bytes = await api.GetCoverAsync(args[1], 32);
-        using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(bytes);
+        var image = FnMusic.Tui.RgbaImage.TryDecode(bytes);
+        if (image is null) { Console.WriteLine("封面解码失败"); return; }
         Console.WriteLine($"cover {image.Width}x{image.Height}, {bytes.Length} bytes");
-        using var small = image.Clone();
-        small.Mutate(c => c.Resize(24, 12));
+        var small = image.Resize(24, 12);
         for (var y = 0; y < small.Height; y++)
         {
             var line = new System.Text.StringBuilder();

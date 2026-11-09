@@ -1,5 +1,3 @@
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 using TG = Terminal.Gui;
 
 namespace FnMusic.Tui;
@@ -43,7 +41,7 @@ public sealed record ColorTheme(
         return new TG.ColorScheme(normal, focus, hot, hotFocus, disabled);
     }
 
-    public static ColorTheme FromImage(Image<Rgba32> image)
+    public static ColorTheme FromImage(RgbaImage image)
     {
         var step = Math.Max(1, Math.Max(image.Width, image.Height) / 96);
         double sumR = 0, sumG = 0, sumB = 0, sumW = 0;
@@ -96,7 +94,7 @@ public sealed record ColorTheme(
     }
 
     /// <summary>取封面的 4 个主色（按色相分桶），用于跑马灯边框。</summary>
-    static IReadOnlyList<TG.Color> BuildPalette(Image<Rgba32> image, TG.Color fallback)
+    static IReadOnlyList<TG.Color> BuildPalette(RgbaImage image, TG.Color fallback)
     {
         var step = Math.Max(1, Math.Max(image.Width, image.Height) / 64);
         var buckets = new Dictionary<int, (int Count, long R, long G, long B)>();

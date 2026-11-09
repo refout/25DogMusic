@@ -1,6 +1,3 @@
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
 using TG = Terminal.Gui;
 
 namespace FnMusic.Tui;
@@ -13,12 +10,12 @@ public sealed class Wallpaper
 {
     public static Wallpaper Shared { get; } = new();
 
-    Image<Rgba32>? _source;
+    RgbaImage? _source;
     byte[]? _cells;
     int _width;
     int _height;
 
-    public void Update(Image<Rgba32>? image, int width, int height, ColorTheme theme)
+    public void Update(RgbaImage? image, int width, int height, ColorTheme theme)
     {
         if (width <= 0 || height <= 0) return;
         if (_cells is not null && _source == image && _width == width && _height == height) return;
@@ -33,8 +30,7 @@ public sealed class Wallpaper
             return;
         }
 
-        using var resized = image.Clone();
-        resized.Mutate(ctx => ctx.Resize(width, height));
+        var resized = image.Resize(width, height);
 
         var cells = new byte[width * height * 3];
         var index = 0;
