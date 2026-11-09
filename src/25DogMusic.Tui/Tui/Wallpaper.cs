@@ -1,6 +1,6 @@
 using TG = Terminal.Gui;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>
 /// 把封面模糊、压暗后铺满整个窗口，作为全局壁纸。

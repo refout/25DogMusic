@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace FnMusic.Auth;
+namespace _25DogMusic.Core.Auth;
 
 /// <summary>
 /// 复刻飞牛音乐 Web 客户端的 authx 请求签名。

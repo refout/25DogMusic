@@ -1,11 +1,11 @@
 ﻿using System.Collections.ObjectModel;
 using System.Text.Json;
 using Terminal.Gui;
-using FnMusic.Api;
-using FnMusic.Config;
-using FnMusic.Playback;
+using _25DogMusic.Core.Api;
+using _25DogMusic.Core.Config;
+using _25DogMusic.Tui.Playback;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>终端版主窗口：浏览、搜索、播放与歌词集中在同一个终端界面。</summary>
 public sealed class PlayerWindow : Window
@@ -721,7 +721,7 @@ public sealed class PlayerWindow : Window
 
     void HandleError(string title, Exception ex)
     {
-        if (ex is FnMusic.Api.MusicApiException { Code: 99999 })
+        if (ex is _25DogMusic.Core.Api.MusicApiException { Code: 99999 })
         {
             RequireLogin();
             _status.Text = $"{title}: 登录已失效，请重新登录";

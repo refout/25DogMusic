@@ -20,9 +20,9 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using FnMusic.Api;
-using FnMusic.Config;
-using FnMusic.Playback;
+using _25DogMusic.Core.Api;
+using _25DogMusic.Core.Config;
+using _25DogMusic.Desktop.Playback;
 using FluentIcons.Avalonia;
 using FluentIcons.Common;
 

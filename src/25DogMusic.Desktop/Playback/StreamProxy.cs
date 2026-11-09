@@ -1,9 +1,9 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using FnMusic.Api;
+using _25DogMusic.Core.Api;
 
-namespace FnMusic.Playback;
+namespace _25DogMusic.Desktop.Playback;
 
 /// <summary>
 /// 本地回环代理：VLC 不支持自定义 Cookie/签名，这里把请求补上再转发给飞牛音乐，

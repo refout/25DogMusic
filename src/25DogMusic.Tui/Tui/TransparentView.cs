@@ -1,6 +1,6 @@
 using Terminal.Gui;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>
 /// 透明容器：自身不铺底色，只负责给子视图提供统一的内边距，

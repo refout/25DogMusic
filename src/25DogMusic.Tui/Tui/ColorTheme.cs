@@ -1,6 +1,6 @@
 using TG = Terminal.Gui;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>当前主题的全局入口，自绘视图直接取用，避免层层传参。</summary>
 public static class ThemeProvider

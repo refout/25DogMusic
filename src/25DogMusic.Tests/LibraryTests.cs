@@ -1,8 +1,8 @@
 using System.Text.Json;
-using FnMusic.Api;
+using _25DogMusic.Core.Api;
 using Xunit;
 
-namespace FnMusic.Tests;
+namespace _25DogMusic.Tests;
 
 /// <summary>飞牛音乐返回 JSON 到界面模型的映射测试。</summary>
 public class LibraryTests

@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using FnMusic.Playback;
+using _25DogMusic.Desktop.Playback;
 
 namespace _25DogMusic.Desktop;
 

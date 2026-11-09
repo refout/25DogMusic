@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace FnMusic.Api;
+namespace _25DogMusic.Core.Api;
 
 /// <summary>一行歌词与其起始时间。</summary>
 public sealed record LyricLine(TimeSpan Time, string Text);

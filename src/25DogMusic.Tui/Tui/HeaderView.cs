@@ -1,8 +1,8 @@
-using FnMusic.Api;
+using _25DogMusic.Core.Api;
 using Terminal.Gui;
 using DRect = System.Drawing.Rectangle;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>顶部信息区：应用标题、当前曲目、播放进度条（文字直接浮在壁纸上）。</summary>
 public sealed class HeaderView : View

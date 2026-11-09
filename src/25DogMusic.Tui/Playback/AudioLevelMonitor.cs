@@ -1,7 +1,7 @@
 using NAudio.Dsp;
 using NAudio.Wave;
 
-namespace FnMusic.Playback;
+namespace _25DogMusic.Tui.Playback;
 
 /// <summary>
 /// 用 WASAPI 回环采集系统输出，算 RMS 电平与 32 段频谱（FFT），供界面画频谱条。

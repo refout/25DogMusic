@@ -1,6 +1,6 @@
 using StbImageSharp;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>
 /// 解码后的 RGBA 位图。解码用纯托管的 StbImageSharp，

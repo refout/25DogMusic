@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
-using FnMusic.Config;
+using _25DogMusic.Core.Config;
 
 namespace _25DogMusic.Desktop;
 

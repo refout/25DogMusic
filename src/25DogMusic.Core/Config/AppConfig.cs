@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace FnMusic.Config;
+namespace _25DogMusic.Core.Config;
 
 /// <summary>本地配置：服务器地址、deviceId、登录令牌（不保存明文密码）。</summary>
 public sealed class AppConfig

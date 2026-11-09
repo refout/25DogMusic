@@ -1,7 +1,7 @@
-using FnMusic.Auth;
+using _25DogMusic.Core.Auth;
 using Xunit;
 
-namespace FnMusic.Tests;
+namespace _25DogMusic.Tests;
 
 /// <summary>authx 签名相关的确定性逻辑测试（不覆盖随机 nonce / timestamp）。</summary>
 public class AuthSignerTests

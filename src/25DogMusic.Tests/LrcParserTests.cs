@@ -1,7 +1,7 @@
-using FnMusic.Api;
+using _25DogMusic.Core.Api;
 using Xunit;
 
-namespace FnMusic.Tests;
+namespace _25DogMusic.Tests;
 
 /// <summary>LRC 歌词解析测试。</summary>
 public class LrcParserTests

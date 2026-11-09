@@ -2,9 +2,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using FnMusic.Auth;
+using _25DogMusic.Core.Auth;
 
-namespace FnMusic.Api;
+namespace _25DogMusic.Core.Api;
 
 /// <summary>接口返回非 0 code 或响应不是 JSON 时抛出。</summary>
 public sealed class MusicApiException(int code, string message) : Exception($"接口返回 code={code}: {message}")

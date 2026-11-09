@@ -1,7 +1,7 @@
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace FnMusic.Playback;
+namespace _25DogMusic.Desktop.Playback;
 
 /// <summary>
 /// 频谱分析：采集系统回环音频（WASAPI loopback），做 FFT 后输出对数的频段能量。

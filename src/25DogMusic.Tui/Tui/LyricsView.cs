@@ -1,8 +1,8 @@
-using FnMusic.Api;
+using _25DogMusic.Core.Api;
 using Terminal.Gui;
 using DRect = System.Drawing.Rectangle;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>歌词滚动视图：当前行高亮居中，背景透出壁纸。</summary>
 public sealed class LyricsView : View

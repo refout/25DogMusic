@@ -1,6 +1,6 @@
 using LibVLCSharp.Shared;
 
-namespace FnMusic.Playback;
+namespace _25DogMusic.Tui.Playback;
 
 /// <summary>LibVLC 无窗口播放：直接播本机回环代理地址。</summary>
 public sealed class VlcPlayer : IDisposable
@@ -11,7 +11,7 @@ public sealed class VlcPlayer : IDisposable
 
     public VlcPlayer()
     {
-        Core.Initialize();
+        LibVLCSharp.Shared.Core.Initialize();
         _lib = new LibVLC("--no-video", "--network-caching=3000", "--quiet");
         _player = new MediaPlayer(_lib);
         _player.EndReached += (_, _) => EndReached?.Invoke(this, EventArgs.Empty);

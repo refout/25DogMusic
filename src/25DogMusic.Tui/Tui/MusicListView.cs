@@ -1,7 +1,7 @@
 using Terminal.Gui;
 using DRect = System.Drawing.Rectangle;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>自绘列表：文字直接浮在壁纸上，不铺纯色底，选中行用强调色叠加。</summary>
 public sealed class MusicListView : View

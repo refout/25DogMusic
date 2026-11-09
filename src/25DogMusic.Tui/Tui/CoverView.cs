@@ -1,7 +1,7 @@
 using Terminal.Gui;
 using DRect = System.Drawing.Rectangle;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>
 /// 用真彩色半块字符把封面画到终端里。

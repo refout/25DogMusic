@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace FnMusic.Api;
+namespace _25DogMusic.Core.Api;
 
 /// <summary>专辑条目。</summary>
 public sealed record Album(string Guid, string Name, string Artist, int TrackCount, string CoverId);

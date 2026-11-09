@@ -1,7 +1,7 @@
 using Terminal.Gui;
 using DRect = System.Drawing.Rectangle;
 
-namespace FnMusic.Tui;
+namespace _25DogMusic.Tui;
 
 /// <summary>频谱条：32 段，底对齐，背景透出壁纸。</summary>
 public sealed class SpectrumView : View

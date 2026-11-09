@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using FnMusic.Api;
-using FnMusic.Auth;
-using FnMusic.Config;
+using _25DogMusic.Core.Api;
+using _25DogMusic.Core.Auth;
+using _25DogMusic.Core.Config;
 
 var cfg = AppConfig.Load();
 if (string.IsNullOrWhiteSpace(cfg.DeviceId))
@@ -91,9 +91,9 @@ switch (command)
     {
         if (args.Length < 2) { Console.WriteLine("用法: fnmusic theme <coverId>"); return; }
         var bytes = await api.GetCoverAsync(args[1], 300);
-        var image = FnMusic.Tui.RgbaImage.TryDecode(bytes);
+        var image = _25DogMusic.Tui.RgbaImage.TryDecode(bytes);
         if (image is null) { Console.WriteLine("封面解码失败"); return; }
-        var theme = FnMusic.Tui.ColorTheme.FromImage(image);
+        var theme = _25DogMusic.Tui.ColorTheme.FromImage(image);
         Console.WriteLine($"bg={theme.Background.R},{theme.Background.G},{theme.Background.B}");
         Console.WriteLine($"panel={theme.Panel.R},{theme.Panel.G},{theme.Panel.B}");
         Console.WriteLine($"text={theme.Text.R},{theme.Text.G},{theme.Text.B}");
@@ -107,7 +107,7 @@ switch (command)
     {
         if (args.Length < 2) { Console.WriteLine("用法: fnmusic render <coverId>"); return; }
         var bytes = await api.GetCoverAsync(args[1], 32);
-        var image = FnMusic.Tui.RgbaImage.TryDecode(bytes);
+        var image = _25DogMusic.Tui.RgbaImage.TryDecode(bytes);
         if (image is null) { Console.WriteLine("封面解码失败"); return; }
         Console.WriteLine($"cover {image.Width}x{image.Height}, {bytes.Length} bytes");
         var small = image.Resize(24, 12);
@@ -140,10 +140,10 @@ switch (command)
     case "leveltest":
     {
         if (args.Length < 2) { Console.WriteLine("用法: fnmusic leveltest <trackGuid>"); return; }
-        using var proxy = new FnMusic.Playback.StreamProxy(api);
+        using var proxy = new _25DogMusic.Tui.Playback.StreamProxy(api);
         proxy.Start();
-        using var player = new FnMusic.Playback.VlcPlayer();
-        using var monitor = new FnMusic.Playback.AudioLevelMonitor();
+        using var player = new _25DogMusic.Tui.Playback.VlcPlayer();
+        using var monitor = new _25DogMusic.Tui.Playback.AudioLevelMonitor();
         Console.WriteLine($"loopback available={monitor.Available}");
         player.Play(proxy.BaseUrl + args[1]);
         await Task.Delay(1200);
@@ -233,7 +233,7 @@ switch (command)
     case "proxytest":
     {
         if (args.Length < 2) { Console.WriteLine("用法: fnmusic proxytest <trackGuid>"); return; }
-        using var proxy = new FnMusic.Playback.StreamProxy(api);
+        using var proxy = new _25DogMusic.Tui.Playback.StreamProxy(api);
         proxy.Start();
         using var http = new HttpClient();
         using var req = new HttpRequestMessage(HttpMethod.Get, proxy.BaseUrl + args[1]);
@@ -248,9 +248,9 @@ switch (command)
     case "playtest":
     {
         if (args.Length < 2) { Console.WriteLine("用法: fnmusic playtest <trackGuid>"); return; }
-        using var proxy = new FnMusic.Playback.StreamProxy(api);
+        using var proxy = new _25DogMusic.Tui.Playback.StreamProxy(api);
         proxy.Start();
-        using var player = new FnMusic.Playback.VlcPlayer();
+        using var player = new _25DogMusic.Tui.Playback.VlcPlayer();
         player.Play(proxy.BaseUrl + args[1]);
         await Task.Delay(6000);
         Console.WriteLine($"isPlaying={player.IsPlaying} time={player.Position}ms length={player.Duration}ms");
@@ -276,7 +276,7 @@ static void RunTui(AppConfig cfg)
 {
     Terminal.Gui.Application.Init();
     var api = new MusicApiClient(cfg.BaseUrl, cfg.Token, cfg.DeviceId);
-    var window = new FnMusic.Tui.PlayerWindow(cfg, api);
+    var window = new _25DogMusic.Tui.PlayerWindow(cfg, api);
     Terminal.Gui.Application.Run(window);
     Terminal.Gui.Application.Shutdown();
 }

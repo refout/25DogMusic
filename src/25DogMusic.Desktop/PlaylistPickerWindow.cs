@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
-using FnMusic.Api;
+using _25DogMusic.Core.Api;
 using FluentIcons.Avalonia;
 using FluentIcons.Common;
 
