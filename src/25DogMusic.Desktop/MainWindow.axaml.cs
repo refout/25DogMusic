@@ -5775,6 +5775,16 @@ public partial class MainWindow : Window
         NowSub.Text = BuildNowSub(_currentTrack);
         UpdateRowHighlight();
         _ = LoadNowCoverAsync(_currentTrack.CoverId);
+
+        // 后台播放期间自动切歌会跳过界面刷新，恢复时补齐全屏页，避免仍停在上一首的信息
+        if (NowPlayingOverlay.IsVisible)
+        {
+            OverlayTitle.Text = _currentTrack.Title;
+            OverlaySub.Text = BuildNowSub(_currentTrack);
+            _ = RefreshOverlayAsync(_currentTrack);
+            if (_lyricsGuid != _currentTrack.Guid) _ = LoadLyricsAsync(_currentTrack.Guid);
+        }
+
         UpdatePlaybackUi();
         SyncTimer();
     }
