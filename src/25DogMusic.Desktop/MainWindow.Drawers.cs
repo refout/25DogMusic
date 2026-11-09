@@ -484,8 +484,8 @@ public partial class MainWindow : Window
 
         var codeBox = MakeFormBox(string.Empty, "code 或完整回跳地址");
         var submitButton = MakeFormButton("提交授权码");
-        submitButton.Width = 120;
-        submitButton.HorizontalAlignment = HorizontalAlignment.Right;
+        // 用 Auto 列 + 最小宽度：卡片变窄时整行仍能一起收缩，不会被固定宽度撑破
+        submitButton.MinWidth = 104;
         submitButton.Click += async (_, _) => await SubmitOAuthAsync(serverBox.Text, codeBox.Text, statusText);
 
         var credentials = new Grid { ColumnDefinitions = new ColumnDefinitions("*,12,*") };
@@ -494,7 +494,7 @@ public partial class MainWindow : Window
         Grid.SetColumn(passField, 2);
         credentials.Children.Add(passField);
 
-        var codeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,10,110") };
+        var codeRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,10,Auto") };
         codeRow.Children.Add(codeBox);
         Grid.SetColumn(submitButton, 2);
         codeRow.Children.Add(submitButton);
