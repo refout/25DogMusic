@@ -590,15 +590,39 @@ public partial class MainWindow : Window
         links.Children.Add(MakeLinkText("问题反馈", "https://github.com/refout/25DogMusic/issues"));
         body.Children.Add(links);
 
-        body.Children.Add(AboutSection(
-            "开源组件",
-            "本程序基于以下开源项目构建，感谢作者与社区：\n" +
-            "· Avalonia（MIT）— 跨平台 UI 框架\n" +
-            "· LibVLCSharp / VideoLAN LibVLC（LGPL-2.1+）— 音频播放内核\n" +
-            "· NAudio（MIT）— WASAPI 环回采集与频谱\n" +
-            "· FluentIcons.Avalonia（MIT）— 图标\n" +
-            "· Terminal.Gui（MIT）— 实验性终端界面\n" +
-            "完整清单与许可证文本见仓库 THIRD-PARTY-NOTICES.md。"));
+        var ossSection = new StackPanel { Spacing = 6 };
+        ossSection.Children.Add(new TextBlock
+        {
+            Text = "开源组件",
+            FontSize = 13,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = TextPrimary
+        });
+        ossSection.Children.Add(new TextBlock
+        {
+            Text = "本程序基于以下开源项目构建，感谢作者与社区：\n" +
+                   "· Avalonia（MIT）— 跨平台 UI 框架\n" +
+                   "· LibVLCSharp / VideoLAN LibVLC（LGPL-2.1+）— 音频播放内核\n" +
+                   "· NAudio（MIT）— WASAPI 环回采集与频谱\n" +
+                   "· FluentIcons.Avalonia（MIT）— 图标\n" +
+                   "· Terminal.Gui（MIT）— 实验性终端界面",
+            FontSize = 12.5,
+            Foreground = TextSecondary,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 21
+        });
+        var noticeLine = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        noticeLine.Children.Add(new TextBlock
+        {
+            Text = "完整清单与许可证文本见仓库",
+            FontSize = 12.5,
+            Foreground = TextSecondary,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        noticeLine.Children.Add(MakeLinkText("THIRD-PARTY-NOTICES.md",
+            "https://github.com/refout/25DogMusic/blob/main/THIRD-PARTY-NOTICES.md"));
+        ossSection.Children.Add(noticeLine);
+        body.Children.Add(ossSection);
 
         body.Children.Add(AboutSection(
             "免责声明",
