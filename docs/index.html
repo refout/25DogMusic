@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>25DogMusic · 飞牛音乐桌面客户端</title>
 <meta name="description" content="基于 Avalonia 的跨平台桌面音乐客户端，连接飞牛 NAS 音乐服务。">
+<meta property="og:title" content="25DogMusic · 飞牛音乐桌面客户端">
+<meta property="og:description" content="基于 Avalonia 的跨平台桌面音乐客户端，连接飞牛 NAS 音乐服务，支持曲库浏览、搜索、播放与歌词。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://refout.github.io/25DogMusic/">
+<meta property="og:image" content="https://refout.github.io/25DogMusic/assets/appicon.png">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="assets/appicon.png">
+<link rel="apple-touch-icon" href="assets/appicon.png">
 <style>
   :root {
     --bg: #0d0b10;
@@ -42,9 +50,9 @@
   .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .3px; }
   .logo {
-    width: 30px; height: 30px; border-radius: 9px;
-    background: linear-gradient(140deg, var(--accent), #a03bff);
-    display: grid; place-items: center; font-size: 15px; font-weight: 700;
+    width: 32px; height: 32px; border-radius: 9px; display: block;
+    object-fit: contain; background: rgba(255, 255, 255, .06);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12);
   }
   .nav-links { display: flex; gap: 22px; font-size: 14px; color: var(--muted); }
   .nav-links a:hover { color: var(--text); }
@@ -129,7 +137,7 @@
 
 <header>
   <div class="wrap nav">
-    <a class="brand" href="#top"><span class="logo">25</span>25DogMusic</a>
+    <a class="brand" href="#top"><img class="logo" src="assets/appicon.png" alt="25DogMusic 图标" width="32" height="32">25DogMusic</a>
     <nav class="nav-links">
       <a href="#features">功能</a>
       <a href="#shot">界面</a>
