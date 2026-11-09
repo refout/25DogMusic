@@ -12,7 +12,7 @@ public sealed class AudioLevelMonitor : IDisposable
     const int FftSize = 2048;
     const int BandCount = 32;
 
-    WasapiLoopbackCapture? _capture;
+    WasapiRecorder? _capture;
     volatile float _level;
 
     readonly List<float> _pending = new(FftSize * 2);
@@ -40,7 +40,9 @@ public sealed class AudioLevelMonitor : IDisposable
             // WASAPI 回环只在 Windows 可用，其他平台保持 Available=false
             if (!OperatingSystem.IsWindows()) return;
 
-            _capture = new WasapiLoopbackCapture();
+            _capture = new WasapiRecorderBuilder()
+                .WithLoopbackCapture()
+                .Build();
             _capture.DataAvailable += OnData;
             _capture.StartRecording();
         }
@@ -59,15 +61,15 @@ public sealed class AudioLevelMonitor : IDisposable
         }
     }
 
-    void OnData(object? sender, WaveInEventArgs e)
+    /// <summary>零拷贝回调：<paramref name="buffer"/> 只在本次回调内有效。</summary>
+    void OnData(ReadOnlySpan<byte> buffer, NAudio.CoreAudioApi.AudioClientBufferFlags flags, long devicePosition, long qpcPosition)
     {
         if (!OperatingSystem.IsWindows()) return;
 
         var format = _capture?.WaveFormat;
-        if (format is null || e.BytesRecorded <= 0) return;
+        if (format is null || buffer.IsEmpty) return;
 
         var channels = Math.Max(1, format.Channels);
-        var buffer = e.Buffer.AsSpan(0, e.BytesRecorded);
         var frames = format.BitsPerSample switch
         {
             16 => buffer.Length / (2 * channels),
