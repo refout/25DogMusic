@@ -42,7 +42,8 @@ public sealed class MusicApiClient : IDisposable
         // 优先 HTTP/2，写接口可能只在 h2 下放行
         _http.DefaultRequestVersion = HttpVersion.Version20;
         _http.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("FnMusicTui/0.1");
+        var assemblyVersion = typeof(MusicApiClient).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd($"25DogMusic/{assemblyVersion}");
     }
 
     public static string NewDeviceId()

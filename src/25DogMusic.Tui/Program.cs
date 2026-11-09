@@ -48,7 +48,7 @@ switch (command)
     }
 
     case "search":
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic search <关键词>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui search <关键词>"); return; }
         await PrintAsync(api.SearchTracksAsync(args[1]));
         break;
 
@@ -89,7 +89,7 @@ switch (command)
 
     case "theme":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic theme <coverId>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui theme <coverId>"); return; }
         var bytes = await api.GetCoverAsync(args[1], 300);
         var image = _25DogMusic.Tui.RgbaImage.TryDecode(bytes);
         if (image is null) { Console.WriteLine("封面解码失败"); return; }
@@ -105,7 +105,7 @@ switch (command)
 
     case "render":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic render <coverId>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui render <coverId>"); return; }
         var bytes = await api.GetCoverAsync(args[1], 32);
         var image = _25DogMusic.Tui.RgbaImage.TryDecode(bytes);
         if (image is null) { Console.WriteLine("封面解码失败"); return; }
@@ -127,7 +127,7 @@ switch (command)
 
     case "lyrics":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic lyrics <trackGuid>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui lyrics <trackGuid>"); return; }
         var lines = await api.GetLyricsAsync(args[1]);
         Console.WriteLine($"歌词 {lines.Count} 行");
         foreach (var line in lines.Take(8))
@@ -139,7 +139,7 @@ switch (command)
 
     case "leveltest":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic leveltest <trackGuid>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui leveltest <trackGuid>"); return; }
         using var proxy = new _25DogMusic.Tui.Playback.StreamProxy(api);
         proxy.Start();
         using var player = new _25DogMusic.Tui.Playback.VlcPlayer();
@@ -158,7 +158,7 @@ switch (command)
 
     case "pwlogin":
     {
-        if (args.Length < 3) { Console.WriteLine("用法: fnmusic pwlogin <用户名> <密码>"); return; }
+        if (args.Length < 3) { Console.WriteLine("用法: 25DogMusic.Tui pwlogin <用户名> <密码>"); return; }
         var token = await api.LoginWithPasswordAsync(args[1], args[2]);
         cfg.Token = token;
         cfg.LastUsername = args[1];
@@ -169,7 +169,7 @@ switch (command)
 
     case "report":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic report <trackGuid>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui report <trackGuid>"); return; }
         using var doc = await api.ReportTrackPlayAsync(args[1]);
         Console.WriteLine(doc.RootElement.GetRawText());
         break;
@@ -184,7 +184,7 @@ switch (command)
 
     case "fav":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic fav <trackGuid>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui fav <trackGuid>"); return; }
         using var doc = await api.AddFavoriteAsync(args[1]);
         Console.WriteLine(doc.RootElement.GetRawText());
         break;
@@ -192,7 +192,7 @@ switch (command)
 
     case "unfav":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic unfav <trackGuid>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui unfav <trackGuid>"); return; }
         using var doc = await api.RemoveFavoriteAsync(args[1]);
         Console.WriteLine(doc.RootElement.GetRawText());
         break;
@@ -208,7 +208,7 @@ switch (command)
 
     case "plcreate":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic plcreate <名称>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui plcreate <名称>"); return; }
         using var doc = await api.CreatePlaylistAsync(args[1]);
         Console.WriteLine(doc.RootElement.GetRawText());
         break;
@@ -216,7 +216,7 @@ switch (command)
 
     case "pladd":
     {
-        if (args.Length < 3) { Console.WriteLine("用法: fnmusic pladd <playlistGuid> <trackGuid>"); return; }
+        if (args.Length < 3) { Console.WriteLine("用法: 25DogMusic.Tui pladd <playlistGuid> <trackGuid>"); return; }
         using var doc = await api.AddTrackToPlaylistAsync(args[1], args[2]);
         Console.WriteLine(doc.RootElement.GetRawText());
         break;
@@ -224,7 +224,7 @@ switch (command)
 
     case "salbums":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic salbums <关键词>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui salbums <关键词>"); return; }
         using var doc = await api.SearchAlbumsAsync(args[1]);
         Console.WriteLine(doc.RootElement.GetRawText()[..150]);
         break;
@@ -232,7 +232,7 @@ switch (command)
 
     case "proxytest":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic proxytest <trackGuid>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui proxytest <trackGuid>"); return; }
         using var proxy = new _25DogMusic.Tui.Playback.StreamProxy(api);
         proxy.Start();
         using var http = new HttpClient();
@@ -247,7 +247,7 @@ switch (command)
 
     case "playtest":
     {
-        if (args.Length < 2) { Console.WriteLine("用法: fnmusic playtest <trackGuid>"); return; }
+        if (args.Length < 2) { Console.WriteLine("用法: 25DogMusic.Tui playtest <trackGuid>"); return; }
         using var proxy = new _25DogMusic.Tui.Playback.StreamProxy(api);
         proxy.Start();
         using var player = new _25DogMusic.Tui.Playback.VlcPlayer();
@@ -258,8 +258,8 @@ switch (command)
     }
 
     case "sign":
-        // 便于与浏览器抓到的 authx 对比：fnmusic sign <path> <body>
-        if (args.Length < 3) { Console.WriteLine("用法: fnmusic sign <path> <body>"); return; }
+        // 便于与浏览器抓到的 authx 对比：25DogMusic.Tui sign <path> <body>
+        if (args.Length < 3) { Console.WriteLine("用法: 25DogMusic.Tui sign <path> <body>"); return; }
         Console.WriteLine(AuthSigner.CreateAuthX(args[1], args[2], isGet: false));
         break;
 
@@ -286,14 +286,14 @@ static void PrintHelp()
     Console.WriteLine("""
         飞牛音乐 TUI 客户端（M0 命令行探针）
 
-        fnmusic probe              探测服务器配置与初始化状态
-        fnmusic login              账号密码登录（密码输入不显示）
-        fnmusic oauth              浏览器授权登录（粘贴 code）
-        fnmusic me                 当前登录用户
-        fnmusic albums [page]      专辑列表
-        fnmusic search <关键词>     搜索歌曲
-        fnmusic sign <path> <body> 输出本地计算的 authx（用于和浏览器对比）
-        fnmusic token              打印已保存的 token
+        25DogMusic.Tui probe              探测服务器配置与初始化状态
+        25DogMusic.Tui login              账号密码登录（密码输入不显示）
+        25DogMusic.Tui oauth              浏览器授权登录（粘贴 code）
+        25DogMusic.Tui me                 当前登录用户
+        25DogMusic.Tui albums [page]      专辑列表
+        25DogMusic.Tui search <关键词>     搜索歌曲
+        25DogMusic.Tui sign <path> <body> 输出本地计算的 authx（用于和浏览器对比）
+        25DogMusic.Tui token              打印已保存的 token
 
         配置文件: %LOCALAPPDATA%\25DogMusic\config.json
         """);
