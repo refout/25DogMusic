@@ -284,6 +284,7 @@ public partial class MainWindow : Window
         NavSettings.Click += (_, _) => ShowSettingsPage();
         SidebarToggle.Click += (_, _) => SetSidebarCollapsed(!_sidebarCollapsed);
         SetSidebarCollapsed(_config.SidebarCollapsed, save: false);
+        SizeChanged += (_, e) => UpdateSidebarForWidth(e.NewSize.Width);
 
         PlaylistAddButton.Click += (_, _) =>
         {

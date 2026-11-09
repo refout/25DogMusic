@@ -37,6 +37,10 @@ public partial class MainWindow : Window
 
     bool _sidebarCollapsed;
 
+    // 窗口宽度低于该值时自动折叠侧栏，变宽后恢复用户手动设置
+    const double AutoCollapseSidebarWidth = 900;
+    bool _autoSidebarCollapsed;
+
     /// <summary>折叠侧栏：只保留图标，歌单区与搜索框隐藏，状态写入配置。</summary>
     void SetSidebarCollapsed(bool collapsed, bool save = true)
     {
@@ -51,6 +55,16 @@ public partial class MainWindow : Window
         if (!save) return;
         _config.SidebarCollapsed = collapsed;
         _config.Save();
+    }
+
+    /// <summary>窄窗口自动折叠侧栏；不写入配置，窗口变宽后回到用户偏好。</summary>
+    void UpdateSidebarForWidth(double width)
+    {
+        var collapse = width < AutoCollapseSidebarWidth;
+        if (collapse == _autoSidebarCollapsed) return;
+
+        _autoSidebarCollapsed = collapse;
+        SetSidebarCollapsed(collapse || _config.SidebarCollapsed, save: false);
     }
 
     void ShowSettingsPage(string? message = null)
