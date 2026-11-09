@@ -68,9 +68,18 @@ public sealed class OAuthLoopbackListener : IDisposable
     static void Respond(HttpListenerContext context, bool success)
     {
         var title = success ? "授权完成" : "授权未完成";
-        var hint = success ? "可以关闭此页面，返回 25DogMusic。" : "请回到 25DogMusic 重试。";
-        var html = $"<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title></head>" +
-                   $"<body style=\"font-family:system-ui,sans-serif;padding:48px\"><h2>{title}</h2><p>{hint}</p></body></html>";
+        var hint = success
+            ? "25DogMusic 已自动切回前台并完成登录，可以关闭此页面。"
+            : "请回到 25DogMusic 重试。";
+        // 授权页是被导航打开的标签页，浏览器通常会拦截 window.close，这里只做尽力尝试
+        var script = success ? "<script>setTimeout(function(){try{window.close()}catch(e){}},800)</script>" : string.Empty;
+        var html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + title + "</title></head>" +
+                   "<body style=\"margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;" +
+                   "background:#0f1116;color:#e8eaf0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif\">" +
+                   "<div style=\"text-align:center;padding:32px\">" +
+                   "<h2 style=\"margin:0 0 12px;font-size:20px\">" + title + "</h2>" +
+                   "<p style=\"margin:0;color:#9aa0ad;font-size:13px\">" + hint + "</p>" +
+                   "</div>" + script + "</body></html>";
         var body = Encoding.UTF8.GetBytes(html);
 
         context.Response.StatusCode = success ? 200 : 400;

@@ -1295,10 +1295,29 @@ public partial class MainWindow : Window
             }
 
             ApplySession(baseUrl, token, _config.LastUsername, device, "授权登录成功");
+            BringToFrontAfterLogin();
         }
         catch (Exception ex)
         {
             status.Text = $"发起授权失败：{ex.Message}";
+        }
+    }
+
+    /// <summary>授权在浏览器里完成，登录后把窗口切回前台，避免用户还停留在浏览器。</summary>
+    void BringToFrontAfterLogin()
+    {
+        if (_hiddenToTray || WindowState == WindowState.Minimized)
+        {
+            ShowFromTray();
+            return;
+        }
+
+        Activate();
+        if (OperatingSystem.IsWindows())
+        {
+            // 前台是浏览器时 Activate 可能只会闪一下任务栏，临时置顶一次确保窗口真正弹到前面
+            Topmost = true;
+            Topmost = false;
         }
     }
 
