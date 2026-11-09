@@ -5387,9 +5387,12 @@ public partial class MainWindow : Window
         if (_player is null || IsBackgrounded) return;
 
         var position = TimeSpan.FromMilliseconds(Math.Max(0, _player.Position));
-        var durationMs = _currentTrack is not null && _currentTrack.DurationMs > 0
-            ? _currentTrack.DurationMs
-            : Math.Max(0, _player.Duration);
+        // 优先用播放器解析出的真实时长：部分整轨 WAV 的实际长度远大于曲库元数据，
+        // 用元数据会让进度条提前走满、时钟超出总时长，看起来像「播完了却不开下一首」
+        var playerDurationMs = Math.Max(0, _player.Duration);
+        var durationMs = playerDurationMs > 0
+            ? playerDurationMs
+            : _currentTrack?.DurationMs ?? 0;
         var duration = TimeSpan.FromMilliseconds(durationMs);
         var positionSeconds = position.TotalSeconds;
         var durationSeconds = duration.TotalSeconds;
