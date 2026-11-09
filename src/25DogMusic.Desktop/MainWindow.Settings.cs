@@ -90,11 +90,12 @@ public partial class MainWindow : Window
         AnimateSettingsTab(tabs.SelectedItem as TabItem);
     }
 
-    /// <summary>设置页 Tab 内容外层：只在内容区域滚动。</summary>
+    /// <summary>设置页 Tab 内容外层：只在内容区域滚动，内容始终跟随可用宽度。</summary>
     Control BuildSettingsTabScroll(Control content) => new ScrollViewer
     {
         VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
         HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+        HorizontalContentAlignment = HorizontalAlignment.Stretch,
         Margin = new Thickness(0, 8, 0, 0),
         Content = content
     };

@@ -499,24 +499,25 @@ public partial class MainWindow : Window
         Grid.SetColumn(submitButton, 2);
         codeRow.Children.Add(submitButton);
 
-        var passwordPane = new StackPanel { Spacing = 10 };
+        var passwordPane = new StackPanel { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Stretch };
         passwordPane.Children.Add(credentials);
         passwordPane.Children.Add(loginButton);
 
-        var oauthPane = new StackPanel { Spacing = 10 };
+        var oauthPane = new StackPanel { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Stretch };
         oauthPane.Children.Add(new TextBlock
         {
             Text = "点击后在浏览器登录飞牛 NAS，授权完成会自动返回并登录；若浏览器未自动返回，也可以把回跳地址或 code 粘贴到下方。",
             FontSize = 11.5,
             Foreground = TextMuted,
-            TextWrapping = TextWrapping.Wrap
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Stretch
         });
         oauthPane.Children.Add(oauthButton);
         oauthPane.Children.Add(codeRow);
 
         // 两种登录方式二选一：上方切换，下方只显示当前方式
         var panes = new Control[] { passwordPane, oauthPane };
-        var paneHost = new StackPanel();
+        var paneHost = new StackPanel { HorizontalAlignment = HorizontalAlignment.Stretch };
         var methodRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var methodButtons = new Button[panes.Length];
 
