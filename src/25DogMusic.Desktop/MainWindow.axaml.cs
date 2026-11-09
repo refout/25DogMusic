@@ -3291,7 +3291,6 @@ public partial class MainWindow : Window
         };
 
         ContentPanel.Children.Add(hero);
-        AddHint("漫游会沿着当前曲目持续推荐，切歌请使用上一首 / 下一首。");
         _ = LoadRoamCoverAsync(track.CoverId);
         _ = SetBackdropAsync(track.CoverId);
     }
